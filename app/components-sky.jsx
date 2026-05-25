@@ -1,12 +1,10 @@
 /* ============================================================
    ZÉNITH — SkyView: the live sky screen.
-   Stars projected onto screen from (az, alt) via simple
-   gnomonic-ish flat projection relative to (heading, tilt).
-   Drag to pan, tap a star to open detail.
+   True gnomonic (perspective) projection centred on (heading, tilt).
+   Drag to pan, pinch to zoom, tap a star to open detail.
    ============================================================ */
 
-const FOV_H = 70;   // horizontal field of view in degrees
-const FOV_V = 120;  // vertical field of view in degrees
+const FOV_H = 70;   // horizontal field of view in degrees (sky-map mode, zoom=1)
 
 const CONST_NAMES_FR = {
   lyra:"Lyre", cygnus:"Cygne", aquila:"Aigle", ursamajor:"Grande Ourse",
@@ -60,17 +58,34 @@ const MILKY_WAY_RD = (() => {
 })();
 
 function project(star, heading, tilt, width, height, zoom = 1) {
-  let relAz = star.az - heading;
-  while (relAz > 180) relAz -= 360;
-  while (relAz < -180) relAz += 360;
-  const relAlt = star.alt - tilt;
-  const fovH = FOV_H / zoom;
-  const fovV = FOV_V / zoom;
-  if (Math.abs(relAz) > fovH * 0.6) return null;
-  if (relAlt < -fovV * 0.55 || relAlt > fovV * 0.55) return null;
-  const x = width/2 + (relAz / (fovH/2)) * (width/2);
-  const y = height/2 - (relAlt / (fovV/2)) * (height/2);
-  return { x, y, relAz, relAlt };
+  const D = Math.PI / 180;
+  const H = heading * D, T = tilt * D;
+  const az = star.az * D, alt = star.alt * D;
+
+  // 3-D unit vectors in East-North-Up frame
+  const Cx = Math.sin(H)*Math.cos(T), Cy = Math.cos(H)*Math.cos(T), Cz = Math.sin(T);
+  const Sx = Math.sin(az)*Math.cos(alt), Sy = Math.cos(az)*Math.cos(alt), Sz = Math.sin(alt);
+
+  const dot_c = Sx*Cx + Sy*Cy + Sz*Cz;   // how far in front of camera
+  if (dot_c < 0.01) return null;           // behind or at edge of hemisphere
+
+  // Screen-plane basis: R = screen-right, U = screen-up (→ screen y decreases)
+  const Rx =  Math.cos(H),              Ry = -Math.sin(H),             Rz = 0;
+  const Ux = -Math.sin(H)*Math.sin(T),  Uy = -Math.cos(H)*Math.sin(T), Uz = Math.cos(T);
+
+  // Focal length from horizontal FOV
+  const f = (width/2) / Math.tan((FOV_H / zoom / 2) * D);
+
+  const x = width/2  + (Sx*Rx + Sy*Ry + Sz*Rz) / dot_c * f;
+  const y = height/2 - (Sx*Ux + Sy*Uy + Sz*Uz) / dot_c * f;
+
+  if (x < -80 || x > width + 80 || y < -80 || y > height + 80) return null;
+
+  return {
+    x, y,
+    relAz:  Math.atan2(Sx*Rx + Sy*Ry,        dot_c) / D,
+    relAlt: Math.atan2(Sx*Ux + Sy*Uy + Sz*Uz, dot_c) / D,
+  };
 }
 
 /* ------ Star drawing on canvas (ambient + milky way) ------ */
@@ -430,8 +445,9 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     if (!dragRef.current) return;
     const dx = e.clientX - dragRef.current.x;
     const dy = e.clientY - dragRef.current.y;
-    const newH = dragRef.current.h0 - dx * (FOV_H / zoom / size.w);
-    const newT = dragRef.current.t0 - dy * (FOV_V / zoom / size.h) * 1.4;
+    const f = (size.w/2) / Math.tan((FOV_H / zoom / 2) * Math.PI/180);
+    const newH = dragRef.current.h0 - dx / f * (180/Math.PI);
+    const newT = dragRef.current.t0 - dy / f * (180/Math.PI);
     setHeading(((newH % 360) + 360) % 360);
     setTilt(Math.max(-15, Math.min(90, newT)));
   }
@@ -505,20 +521,21 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     return lines;
   }, [namedProjected]);
 
-  // horizon altitude=0
+  // Horizon (alt=0): gnomonic y = h/2 + tan(tilt)*f
   const horizonY = useMemo(() => {
-    const relAlt = 0 - effTilt;
-    const fovV = FOV_V / zoom;
-    if (Math.abs(relAlt) > fovV * 0.55) return null;
-    return size.h/2 - (relAlt / (fovV/2)) * (size.h/2);
+    const D = Math.PI / 180;
+    const f = (size.w/2) / Math.tan((FOV_H / zoom / 2) * D);
+    const y = size.h/2 + Math.tan(effTilt * D) * f;
+    return (y >= 0 && y <= size.h) ? y : null;
   }, [effTilt, size, zoom]);
 
-  // zenith marker (alt = 90)
+  // Zenith (alt=90): gnomonic y = h/2 - cot(tilt)*f
   const zenithY = useMemo(() => {
-    const relAlt = 90 - effTilt;
-    const fovV = FOV_V / zoom;
-    if (relAlt < 0 || relAlt > fovV * 0.55) return null;
-    return size.h/2 - (relAlt / (fovV/2)) * (size.h/2);
+    if (effTilt < 0.5) return null;
+    const D = Math.PI / 180, T = effTilt * D;
+    const f = (size.w/2) / Math.tan((FOV_H / zoom / 2) * D);
+    const y = size.h/2 - (Math.cos(T) / Math.sin(T)) * f;
+    return (y >= 0 && y <= size.h) ? y : null;
   }, [effTilt, size, zoom]);
 
   // closest bright object to center reticle
