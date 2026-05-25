@@ -94,6 +94,28 @@ function HeroArtwork({ obj }) {
       </svg>
     );
   }
+  if (obj.id === "sun") {
+    return (
+      <svg viewBox="0 0 390 360" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
+        <SkyDots count={50} seed={22}/>
+        <g transform="translate(195 180)">
+          <circle r="135" fill="rgba(255,215,50,0.03)"/>
+          <circle r="100" fill="rgba(255,215,50,0.06)"/>
+          <circle r="74"  fill="rgba(255,215,50,0.10)"/>
+          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a => {
+            const rad = a * Math.PI / 180;
+            return <line key={a}
+              x1={Math.cos(rad)*82} y1={Math.sin(rad)*82}
+              x2={Math.cos(rad)*114} y2={Math.sin(rad)*114}
+              stroke="rgba(255,210,40,0.50)" strokeWidth="2.5"/>;
+          })}
+          <circle r="66" fill="rgba(255,200,40,0.22)"/>
+          <circle r="52" fill="rgba(255,210,50,0.55)"/>
+          <circle r="40" fill="rgba(255,215,50,0.92)"/>
+        </g>
+      </svg>
+    );
+  }
   // étoile (default)
   return (
     <svg viewBox="0 0 390 360" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">

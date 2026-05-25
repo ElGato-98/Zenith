@@ -225,6 +225,23 @@ const _CONST_FR = {
 // Extend ATLAS_ENTRIES with all named stars + Moon entry
 const _existingIds = new Set(window.ATLAS_ENTRIES.map(e => e.id));
 
+// Add Sun entry
+if (!_existingIds.has("sun")) {
+  window.ATLAS_ENTRIES.push({
+    id: "sun", cat: "Étoile", name: "Soleil", bayer: "Sol",
+    constellation: "Variable (écliptique)", type: "Naine jaune — séquence principale (G2 V)",
+    distance: "149 597 870 km — 1 UA", magnitude: "−26,74",
+    rightAscension: "Variable", declination: "Variable",
+    spectral: "G2 V", mass: "1 M☉ (1,989 × 10³⁰ kg)", radius: "695 700 km",
+    discovery: "Connue depuis l'Antiquité",
+    prose: [
+      "Notre étoile, le Soleil, est une naine jaune de type spectral G2 V, âgée de 4,6 milliards d'années et située à exactement 1 unité astronomique — soit 8 minutes 20 secondes-lumière — de la Terre. Sa masse représente 99,86 % de la totalité du Système solaire.",
+      "Sa surface visible, la <em>photosphère</em>, brûle à 5 778 K et révèle des taches solaires — zones magnétiques plus froides — dont le nombre oscille selon un cycle d'environ 11 ans. La couronne, enveloppe externe invisible à l'œil nu, atteint plusieurs millions de kelvins.",
+      "<strong>Attention :</strong> n'observez jamais le Soleil directement sans filtre solaire certifié. Même quelques secondes d'observation non protégée causent des lésions rétiniennes irréversibles."
+    ]
+  });
+}
+
 // Add Moon entry
 if (!_existingIds.has("moon")) {
   window.ATLAS_ENTRIES.push({
