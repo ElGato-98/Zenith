@@ -92,6 +92,13 @@ body {
 .app.night { --paper: #e07a72; --paper-dim: rgba(224, 122, 114, 0.55); --paper-fade: rgba(224, 122, 114, 0.22); --paper-trace: rgba(224, 122, 114, 0.10); --paper-faint: rgba(224, 122, 114, 0.04); }
 .app.night .device-status { color: var(--paper); }
 
+/* on real iPhone the iOS status bar is already there — hide our mock */
+@media (max-width: 430px) {
+  .device-status { display: none; }
+  .hud-top { top: 16px; }
+  .loc-chip { top: 80px; }
+}
+
 /* iOS-style status bar */
 .device-status {
   position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 50;
@@ -252,6 +259,61 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, 0);
   width: 1px; height: 100%; background: var(--paper);
   margin-top: -4px;
+}
+
+/* ========== music player panel ========== */
+.music-panel {
+  position: absolute; right: 16px; z-index: 24;
+  width: 200px;
+  background: rgba(14, 12, 10, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--paper-trace);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.music-panel-title {
+  font-family: var(--serif); font-size: 15px; line-height: 1.2;
+  color: var(--paper);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.music-panel-sub {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--paper-fade);
+  margin-top: 2px;
+}
+.music-panel-controls {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+}
+.music-ctrl {
+  background: none; border: none; color: var(--paper-dim);
+  cursor: pointer; padding: 4px; line-height: 1;
+  font-size: 14px;
+  transition: color 0.15s;
+}
+.music-ctrl:hover { color: var(--paper); }
+.music-ctrl.is-play {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--paper-trace);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+.music-panel-vol {
+  display: flex; align-items: center; gap: 8px;
+}
+.music-panel-vol input[type=range] {
+  flex: 1; height: 2px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--paper-trace); border-radius: 1px; outline: none;
+}
+.music-panel-vol input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--paper); cursor: pointer;
+}
+.music-empty {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--paper-fade); text-align: center; line-height: 1.5;
 }
 
 /* top-right HUD */

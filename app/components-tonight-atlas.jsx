@@ -11,7 +11,7 @@ function MoonDisc({ illumination = 0.78, waxing = true }) {
   // terminator: ellipse with x-radius scaled by illumination
   const k = 1 - 2 * illumination; // -1 (full) to 1 (new)
   const rx = Math.abs(k) * R;
-  const flip = (k > 0) === waxing; // controls which side is dark
+  const flip = (k < 0); // gibbous → ellipse lumineuse ; croissant → ellipse sombre
   return (
     <svg viewBox="0 0 108 108" width="100%" height="100%">
       <defs>

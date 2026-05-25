@@ -45,6 +45,99 @@ function SearchButton({ onClick }) {
   );
 }
 
+/* ---- Pistes audio — déposez vos .mp3 dans app/music/ puis listez-les ici ---- */
+const TRACKS = [
+  // { title: "Nom du morceau", src: "./music/nom.mp3" },
+];
+
+function useAudio(tracks) {
+  const audioRef = useRef(null);
+  const [trackIdx, setTrackIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.5);
+
+  useEffect(() => {
+    if (!tracks.length) return;
+    if (!audioRef.current) audioRef.current = new Audio();
+    const a = audioRef.current;
+    a.src = tracks[trackIdx].src;
+    a.loop = tracks.length === 1;
+    a.volume = volume;
+    if (playing) a.play().catch(() => {});
+    a.onended = () => {
+      if (tracks.length > 1) setTrackIdx(i => (i + 1) % tracks.length);
+    };
+    return () => { a.onended = null; };
+  }, [trackIdx, tracks]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = volume;
+  }, [volume]);
+
+  function toggle() {
+    if (!tracks.length) return;
+    const a = audioRef.current;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play().catch(() => {}); setPlaying(true); }
+  }
+  function prev() { setTrackIdx(i => (i - 1 + tracks.length) % tracks.length); }
+  function next() { setTrackIdx(i => (i + 1) % tracks.length); }
+
+  return { playing, toggle, prev, next, volume, setVolume, trackIdx };
+}
+
+function MusicButton({ on, onToggle }) {
+  return (
+    <button
+      className={"hud-btn " + (on ? "is-active" : "")}
+      onClick={onToggle}
+      title="Musique d'ambiance"
+    >
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M5 10.5 V3 L11 1.5 V8" stroke="currentColor" strokeWidth="0.9" fill="none"/>
+        <circle cx="3.5" cy="10.5" r="1.8" stroke="currentColor" strokeWidth="0.9"/>
+        <circle cx="9.5" cy="8" r="1.8" stroke="currentColor" strokeWidth="0.9"/>
+      </svg>
+    </button>
+  );
+}
+
+function MusicPanel({ tracks, audio, topOffset }) {
+  const track = tracks[audio.trackIdx];
+  return (
+    <div className="music-panel" style={{ top: topOffset }}>
+      {tracks.length === 0 ? (
+        <div className="music-empty">Aucune piste —<br/>déposez vos .mp3<br/>dans app/music/</div>
+      ) : (
+        <>
+          <div>
+            <div className="music-panel-sub">En cours</div>
+            <div className="music-panel-title">{track.title}</div>
+          </div>
+          <div className="music-panel-controls">
+            <button className="music-ctrl" onClick={audio.prev}>&#9664;&#9664;</button>
+            <button className="music-ctrl is-play" onClick={audio.toggle}>
+              {audio.playing ? "⏸" : "▶"}
+            </button>
+            <button className="music-ctrl" onClick={audio.next}>&#9654;&#9654;</button>
+          </div>
+          <div className="music-panel-vol">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1 3.5 H3.5 L6 1.5 V8.5 L3.5 6.5 H1 Z" stroke="currentColor" strokeWidth="0.7"/>
+              <path d="M7.5 3 Q9 5 7.5 7" stroke="currentColor" strokeWidth="0.7" fill="none"/>
+            </svg>
+            <input type="range" min="0" max="1" step="0.01"
+              value={audio.volume}
+              onChange={e => audio.setVolume(parseFloat(e.target.value))}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CameraButton({ on, onToggle }) {
   return (
     <button
@@ -63,6 +156,8 @@ function CameraButton({ on, onToggle }) {
 
 function App() {
   const [screen, setScreen] = useState("ciel");
+  const [musicOpen, setMusicOpen] = useState(false);
+  const audio = useAudio(TRACKS);
   const [nightMode, setNightMode] = useState(() => localStorage.getItem("z-night") === "1");
   const [selected, setSelected] = useState(null);
   const [location, setLocation] = useState(() => {
@@ -184,8 +279,10 @@ function App() {
             <CompassButton on={compassMode} active={compassMode && deviceOrient != null} onToggle={toggleCompass}/>
             <CameraButton on={cameraMode} onToggle={toggleCamera}/>
             <NightToggle on={nightMode} onToggle={() => setNightMode(n => !n)}/>
+            <MusicButton on={musicOpen || audio.playing} onToggle={() => setMusicOpen(o => !o)}/>
             <SearchButton onClick={gotoAtlas}/>
           </div>
+          {musicOpen && <MusicPanel tracks={TRACKS} audio={audio} topOffset={54 + 4*(34+8) + 8}/>}
           <TimeScrubber
             minutes={minutes}
             onChange={handleScrubChange}

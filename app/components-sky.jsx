@@ -185,7 +185,7 @@ function MoonMark({ moon, x, y, onTap, nightMode }) {
   const waxing = moon.waxing;
   const k = 1 - 2 * ill;
   const rx = Math.abs(k) * R;
-  const flip = (k > 0) === waxing;
+  const flip = (k < 0); // gibbous → ellipse lumineuse ; croissant → ellipse sombre
   return (
     <g style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onTap({ ...moon, id: "moon", name: "Lune", kind: "moon" }); }}>
       <circle cx={x} cy={y} r={22} fill="transparent"/>
@@ -239,7 +239,7 @@ function useDeviceOrientation(enabled) {
       const beta = e.beta == null ? 90 : e.beta;
       rawRef.current = {
         heading,
-        tilt: Math.max(-15, Math.min(90, 90 - beta)),
+        tilt: Math.max(-15, Math.min(90, beta - 90)),
       };
     }
 
