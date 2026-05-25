@@ -223,56 +223,45 @@ function useDeviceOrientation(enabled) {
 
     // Event handler only writes to a ref — no React state, no render
     function handler(e) {
-      let heading;
-      if (e.webkitCompassHeading !== undefined) {
-        heading = e.webkitCompassHeading;
-      } else if (e.alpha !== null) {
-        heading = (360 - e.alpha) % 360;
-      } else {
-        return;
-      }
-      // beta is front-back tilt. In portrait:
-      //   beta = 90   → phone vertical (camera facing horizon)  → tilt = 0
-      //   beta = 0    → phone flat, screen up (camera facing sky) → tilt = 90
-      //   beta = 180  → phone flat, screen down                  → tilt = -90
-      // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
-      const beta = e.beta == null ? 90 : e.beta;
-      rawRef.current = {
-        heading,
-        tilt: Math.max(-15, Math.min(75, beta - 90)),
-      };
+      if (e.alpha == null || e.beta == null) return;
+      const beta = e.beta;
+      const tilt = Math.max(-15, Math.min(75, beta - 90));
+      // alphaHeading: gyroscope Z axis — stable at all tilt angles, no gimbal lock.
+      // compassHeading: webkitCompassHeading — accurate but flips ~45° on iOS.
+      // Strategy: use alphaHeading as primary, re-calibrate on compass when tilt < 25°.
+      const alphaHeading = (360 - e.alpha) % 360;
+      const compassHeading = e.webkitCompassHeading ?? alphaHeading;
+      rawRef.current = { alphaHeading, compassHeading, tilt };
     }
 
-    // rAF loop: applies low-pass filter then updates React state (max 60 fps)
-    // ALPHA controls the smoothing: lower = smoother but more lag.
-    // 0.2 ≈ 3-frame lag at 60 fps (~50 ms) — responsive and jitter-free.
+    // rAF loop: low-pass filter + gyro/compass fusion
     const ALPHA = 0.2;
 
     function tick() {
       if (rawRef.current) {
         const raw = rawRef.current;
         if (!smoothRef.current) {
-          smoothRef.current = { heading: raw.heading, tilt: raw.tilt, flipOffset: 0 };
+          const initOffset = raw.compassHeading - raw.alphaHeading;
+          smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt, calibOffset: initOffset };
         } else {
-          // Apply accumulated flip-correction offset then compute delta.
-          let fo = smoothRef.current.flipOffset;
-          let corrected = (raw.heading + fo + 360) % 360;
-          let dh = corrected - smoothRef.current.heading;
+          const s = smoothRef.current;
+          // Re-calibrate on compass only when tilt is low (compass reliable below 25°)
+          let calibOffset = s.calibOffset;
+          if (raw.tilt < 25) {
+            let dd = (raw.compassHeading - raw.alphaHeading) - calibOffset;
+            if (dd >  180) dd -= 360;
+            if (dd < -180) dd += 360;
+            calibOffset += dd * 0.05;
+          }
+          // Stable heading = gyro + calibration offset
+          const stableHeading = (raw.alphaHeading + calibOffset + 360) % 360;
+          let dh = stableHeading - s.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
-          // iOS webkitCompassHeading flips exactly 180° near zenith.
-          // If the jump is > 150° after offset, it's a flip — absorb it.
-          if (Math.abs(dh) > 150) {
-            fo = (fo + 180) % 360;
-            corrected = (raw.heading + fo + 360) % 360;
-            dh = corrected - smoothRef.current.heading;
-            if (dh >  180) dh -= 360;
-            if (dh < -180) dh += 360;
-          }
           smoothRef.current = {
-            heading:     (smoothRef.current.heading + dh * ALPHA + 360) % 360,
-            tilt:        smoothRef.current.tilt + (raw.tilt - smoothRef.current.tilt) * ALPHA,
-            flipOffset:  fo,
+            heading:     (s.heading + dh * ALPHA + 360) % 360,
+            tilt:        s.tilt + (raw.tilt - s.tilt) * ALPHA,
+            calibOffset,
           };
         }
         setOrient({ ...smoothRef.current });
