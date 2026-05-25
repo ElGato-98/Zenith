@@ -236,10 +236,12 @@ function useDeviceOrientation(enabled) {
       //   beta = 0    → phone flat, screen up (camera facing sky) → tilt = 90
       //   beta = 180  → phone flat, screen down                  → tilt = -90
       // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
-      const beta = e.beta == null ? 90 : e.beta;
+      // Clamp beta to [50, 160] before computing tilt.
+      // Past 160° the compass heading flips 180° (gimbal lock near zenith).
+      const beta = Math.max(50, Math.min(160, e.beta == null ? 90 : e.beta));
       rawRef.current = {
         heading,
-        tilt: Math.max(-15, Math.min(90, beta - 90)),
+        tilt: Math.max(-15, Math.min(70, beta - 90)),
       };
     }
 
@@ -254,12 +256,14 @@ function useDeviceOrientation(enabled) {
         if (!smoothRef.current) {
           smoothRef.current = { heading: raw.heading, tilt: raw.tilt };
         } else {
-          // Heading interpolation that handles the 0°/360° wraparound
+          // Heading interpolation that handles the 0°/360° wraparound.
+          // Large jumps (> 90°) are likely gimbal-lock artifacts — dampen heavily.
           let dh = raw.heading - smoothRef.current.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
+          const alphaH = Math.abs(dh) > 90 ? 0.02 : ALPHA;
           smoothRef.current = {
-            heading: (smoothRef.current.heading + dh * ALPHA + 360) % 360,
+            heading: (smoothRef.current.heading + dh * alphaH + 360) % 360,
             tilt:    smoothRef.current.tilt + (raw.tilt - smoothRef.current.tilt) * ALPHA,
           };
         }
