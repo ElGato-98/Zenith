@@ -63,9 +63,12 @@ function CameraButton({ on, onToggle }) {
 
 function App() {
   const [screen, setScreen] = useState("ciel");
-  const [nightMode, setNightMode] = useState(false);
+  const [nightMode, setNightMode] = useState(() => localStorage.getItem("z-night") === "1");
   const [selected, setSelected] = useState(null);
-  const [location, setLocation] = useState(LOCATIONS.find(l => l.id === "liege") || LOCATIONS[0]);
+  const [location, setLocation] = useState(() => {
+    const id = localStorage.getItem("z-loc");
+    return (id && LOCATIONS.find(l => l.id === id)) || LOCATIONS.find(l => l.id === "liege") || LOCATIONS[0];
+  });
   const [locSheetOpen, setLocSheetOpen] = useState(false);
   const [compassMode, setCompassMode] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
@@ -81,6 +84,9 @@ function App() {
       alert("Permission refusée. Activez l'accès aux capteurs dans les réglages de Safari pour utiliser le compas.");
     }
   }
+
+  useEffect(() => { localStorage.setItem("z-night", nightMode ? "1" : "0"); }, [nightMode]);
+  useEffect(() => { if (location.id !== "me") localStorage.setItem("z-loc", location.id); }, [location]);
 
   async function toggleCamera() {
     if (cameraMode) { setCameraMode(false); return; }

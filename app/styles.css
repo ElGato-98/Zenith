@@ -199,6 +199,17 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 }
 .sky.camera-on { background: transparent; }
 .sky.camera-on .sky-grain { display: none; }
+.plate-btn {
+  position: absolute; bottom: 92px; right: 16px; z-index: 30;
+  background: rgba(6,5,4,0.72); border: 1px solid rgba(232,228,216,0.22);
+  color: rgba(232,228,216,0.75); font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 7px 14px; border-radius: 20px; backdrop-filter: blur(8px);
+  transition: color 0.2s, border-color 0.2s;
+}
+.plate-btn.is-ok    { color: rgba(110,220,140,0.9); border-color: rgba(110,220,140,0.35); }
+.plate-btn.is-weak  { color: rgba(220,160,70,0.9);  border-color: rgba(220,160,70,0.35);  }
+.plate-btn.is-solving { opacity: 0.55; }
 
 /* compass strip */
 .compass {

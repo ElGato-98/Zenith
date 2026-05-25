@@ -114,6 +114,25 @@ function moonPhaseName(angle) {
   return "Dernier croissant";
 }
 
+/* Sun: current position + rise/set */
+function getSunInfo(observer, date) {
+  const equ = Astronomy.Equator("Sun", date, observer, true, true);
+  const hor = Astronomy.Horizon(date, observer, equ.ra, equ.dec, "normal");
+  let rise = null, set = null;
+  try {
+    const rEvt = Astronomy.SearchRiseSet("Sun", observer, +1, date, 1);
+    if (rEvt) rise = rEvt.date;
+    const sEvt = Astronomy.SearchRiseSet("Sun", observer, -1, date, 1);
+    if (sEvt) set = sEvt.date;
+  } catch(_) {}
+  return {
+    az: hor.azimuth, alt: hor.altitude,
+    ra: equ.ra, dec: equ.dec,
+    rise, set,
+    constellation: constellationFromRA(equ.ra)
+  };
+}
+
 /* Sun: rise/set + astronomical twilight (-18°) */
 function getSunTimes(observer, date) {
   // Use start of local day (00:00) for searching
@@ -321,7 +340,7 @@ function getDynamicEvents(observer, date) {
 Object.assign(window, {
   getStarVisibility,
   makeObserver, equatorialToHorizontal, computeStarsPositions,
-  getPlanetPositions, getMoonInfo, getSunTimes,
+  getPlanetPositions, getMoonInfo, getSunInfo, getSunTimes,
   moonPhaseName, formatTime, formatDateShort, frenchDate,
   constellationFromRA, getDynamicEvents
 });
