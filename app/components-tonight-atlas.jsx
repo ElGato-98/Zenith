@@ -84,6 +84,10 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
   const sunTimes = useMemo(() => observer && date ? getSunTimes(observer, date) : null, [observer, date]);
   const moonInfo = useMemo(() => observer && date ? getMoonInfo(observer, date) : null, [observer, date]);
   const planets = useMemo(() => observer && date ? getPlanetPositions(observer, date) : [], [observer, date]);
+  const eventsData = useMemo(() => {
+    if (!observer || !date) return [];
+    try { return getDynamicEvents(observer, date); } catch(_) { return []; }
+  }, [observer, date]);
 
   const dateStr = date ? frenchDate(date) : "";
   const dateCap = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
@@ -171,7 +175,7 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
             <h3>Évènements</h3>
             <span className="count numeral">indicatifs</span>
           </div>
-          {TONIGHT.events.map((ev, i) => (
+          {eventsData.map((ev, i) => (
             <article className="event" key={i}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
                 <span className="row-glyph" style={{ marginTop: "4px" }}>
@@ -189,13 +193,19 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
               </div>
             </article>
           ))}
+          {eventsData.length === 0 && (
+            <div style={{
+              fontFamily:"var(--serif)", fontStyle:"italic",
+              color:"var(--paper-dim)", fontSize:"14px", padding:"12px 0"
+            }}>
+              Aucun événement notable cette nuit — prochaine pluie d'étoiles ou conjonction à venir.
+            </div>
+          )}
           <div style={{
-            marginTop: "8px",
-            fontFamily: "var(--mono)", fontSize: "9px",
-            color: "var(--paper-fade)",
-            letterSpacing: "0.16em", textTransform: "uppercase"
+            marginTop:"8px", fontFamily:"var(--mono)", fontSize:"9px",
+            color:"var(--paper-fade)", letterSpacing:"0.16em", textTransform:"uppercase"
           }}>
-            * Données ISS / météores fournies à titre indicatif — calcul en temps réel à venir
+            Pluies d'étoiles · conjonctions · phases lunaires — calcul astronomique en temps réel
           </div>
         </section>
 

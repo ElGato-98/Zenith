@@ -8,6 +8,19 @@
 const FOV_H = 70;   // horizontal field of view in degrees
 const FOV_V = 120;  // vertical field of view in degrees
 
+const CONST_NAMES_FR = {
+  lyra:"Lyre", cygnus:"Cygne", aquila:"Aigle", ursamajor:"Grande Ourse",
+  ursaminor:"Petite Ourse", cassiopeia:"Cassiopée", bootes:"Bouvier",
+  hercules:"Hercule", scorpius:"Scorpion", pegasus:"Pégase",
+  andromeda:"Andromède", corona:"Couronne Boréale", virgo:"Vierge",
+  leo:"Lion", sagittarius:"Sagittaire", ophiuchus:"Ophiuchus",
+  draco:"Dragon", cepheus:"Céphée", perseus:"Persée", serpens:"Serpent",
+  triangulum:"Triangle", canesvenatici:"Chiens de Chasse",
+  coma:"Chevelure de Bérénice", orion:"Orion", gemini:"Gémeaux",
+  taurus:"Taureau", auriga:"Cocher", canismajor:"Grand Chien",
+  canisminor:"Petit Chien", piscisaustrinus:"Poisson austral",
+};
+
 // generate ambient background stars with random RA/Dec so they rotate properly
 const AMBIENT_STARS_RD = (() => {
   let seed = 17;
@@ -140,6 +153,28 @@ function PlanetMark({ p, x, y, onTap, nightMode }) {
       <line x1={x} y1={y + 8} x2={x} y2={y + 12} stroke={p.color} strokeWidth="0.8" opacity="0.55"/>
       <line x1={x - 12} y1={y} x2={x - 8} y2={y} stroke={p.color} strokeWidth="0.8" opacity="0.55"/>
       <line x1={x + 8} y1={y} x2={x + 12} y2={y} stroke={p.color} strokeWidth="0.8" opacity="0.55"/>
+    </g>
+  );
+}
+
+function MoonMark({ moon, x, y, onTap, nightMode }) {
+  const R = 9;
+  const ill = moon.illumination;
+  const waxing = moon.waxing;
+  const k = 1 - 2 * ill;
+  const rx = Math.abs(k) * R;
+  const flip = (k > 0) === waxing;
+  return (
+    <g style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onTap({ ...moon, id: "moon", name: "Lune", kind: "moon" }); }}>
+      <circle cx={x} cy={y} r={22} fill="transparent"/>
+      <circle cx={x} cy={y} r={R+7} fill="rgba(232,228,216,0.05)"/>
+      <circle cx={x} cy={y} r={R+3} fill="rgba(232,228,216,0.10)"/>
+      <defs><clipPath id="moon-clip-sv"><circle cx={x} cy={y} r={R}/></clipPath></defs>
+      <circle cx={x} cy={y} r={R} fill="rgba(232,228,216,0.90)"/>
+      <g clipPath="url(#moon-clip-sv)">
+        <rect x={waxing ? x - R : x} y={y - R} width={R} height={R * 2} fill="rgba(10,9,8,0.95)"/>
+        <ellipse cx={x} cy={y} rx={rx} ry={R} fill={flip ? "rgba(232,228,216,0.90)" : "rgba(10,9,8,0.95)"}/>
+      </g>
     </g>
   );
 }
@@ -338,6 +373,17 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     }).filter(Boolean);
   }, [planetsLive, effHeading, effTilt, size]);
 
+  const moonLive = useMemo(() => {
+    if (!observer || !date) return null;
+    try { return getMoonInfo(observer, date); } catch(_) { return null; }
+  }, [observer, date]);
+
+  const moonProjected = useMemo(() => {
+    if (!moonLive) return null;
+    const p = project(moonLive, effHeading, effTilt, size.w, size.h);
+    return p ? { ...moonLive, ...p, id: "moon", name: "Lune" } : null;
+  }, [moonLive, effHeading, effTilt, size]);
+
   // constellation lines visible
   const constellationLines = useMemo(() => {
     const byId = Object.fromEntries(namedProjected.map(s => [s.id, s]));
@@ -371,7 +417,8 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     const cx = size.w/2, cy = size.h/2;
     const candidates = [
       ...namedProjected.filter(s => s.mag < 2.5),
-      ...planetProjected.map(p => ({ ...p, kind: "planet" }))
+      ...planetProjected.map(p => ({ ...p, kind: "planet" })),
+      ...(moonProjected ? [{ ...moonProjected, mag: -12 }] : [])
     ];
     let best = null; let bestD = 60; // px radius
     for (const c of candidates) {
@@ -379,7 +426,24 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       if (d < bestD) { bestD = d; best = c; }
     }
     return best;
-  }, [namedProjected, planetProjected, size]);
+  }, [namedProjected, planetProjected, moonProjected, size]);
+
+  const constellationLabels = useMemo(() => {
+    const byConst = {};
+    for (const s of namedProjected) {
+      if (!s.constellation) continue;
+      if (!byConst[s.constellation]) byConst[s.constellation] = [];
+      byConst[s.constellation].push(s);
+    }
+    return Object.entries(byConst)
+      .filter(([, stars]) => stars.length >= 2)
+      .map(([id, stars]) => {
+        const cx = stars.reduce((sum, s) => sum + s.x, 0) / stars.length;
+        const cy = stars.reduce((sum, s) => sum + s.y, 0) / stars.length;
+        return { id, name: CONST_NAMES_FR[id] || id, x: cx, y: cy };
+      })
+      .filter(l => l.x > 20 && l.x < size.w - 20 && l.y > 80 && l.y < size.h - 180);
+  }, [namedProjected, size]);
 
   return (
     <div
@@ -437,6 +501,13 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
             <PlanetMark key={p.id} p={p} x={p.x} y={p.y} onTap={onTapObject} nightMode={nightMode}/>
           ))}
         </g>
+
+        {/* moon */}
+        <g style={{ pointerEvents: "auto" }}>
+          {moonProjected && (
+            <MoonMark moon={moonProjected} x={moonProjected.x} y={moonProjected.y} onTap={onTapObject} nightMode={nightMode}/>
+          )}
+        </g>
       </svg>
 
       {/* labels for the brightest stars in view (hide if it's the reticle target) */}
@@ -459,6 +530,19 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
         </div>
       ))}
 
+      {moonProjected && moonProjected.id !== reticleTarget?.id && moonProjected.y < size.h - 180 && (
+        <div className="sky-obj-label" style={{ left: moonProjected.x + 12 + "px", top: moonProjected.y + "px" }}>
+          <div className="sky-obj-label-name">Lune</div>
+          <div className="sky-obj-label-meta numeral">{moonProjected.phaseName} · {Math.round(moonProjected.illumination * 100)}%</div>
+        </div>
+      )}
+
+      {constellationLabels.map(l => (
+        <div key={"cst-"+l.id} className="sky-const-label" style={{ left: l.x+"px", top: l.y+"px" }}>
+          {l.name}
+        </div>
+      ))}
+
       <div className="sky-grain"></div>
 
       {/* compass + reticle + scope label */}
@@ -470,7 +554,12 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
           <span className="scope-label-line"></span>
           <div className="scope-label-name">{reticleTarget.name}</div>
           <div className="scope-label-meta">
-            m {reticleTarget.mag.toFixed(2)} · {reticleTarget.bayer || reticleTarget.constellation}
+            {reticleTarget.kind === "moon"
+              ? `${reticleTarget.phaseName} · ${Math.round(reticleTarget.illumination * 100)}%`
+              : reticleTarget.kind === "planet"
+              ? `m ${reticleTarget.mag?.toFixed(1) ?? "—"} · alt ${reticleTarget.alt?.toFixed(0) ?? "—"}°`
+              : `m ${reticleTarget.mag?.toFixed(2) ?? "—"} · ${reticleTarget.bayer || reticleTarget.constellation || "—"}`
+            }
           </div>
         </div>
       )}

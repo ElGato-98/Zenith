@@ -192,3 +192,75 @@ const EXTRA_CONSTELLATIONS = {
 window.NAMED_STARS = NAMED_STARS_REAL;
 // Merge extra constellation lines
 window.CONSTELLATION_LINES = Object.assign({}, window.CONSTELLATION_LINES, EXTRA_CONSTELLATIONS);
+
+// Format helpers for atlas entries
+function _raHMS(ra) {
+  const r = ((ra % 24) + 24) % 24;
+  const h = Math.floor(r);
+  const m = Math.floor((r - h) * 60);
+  const s = (((r - h) * 60 - m) * 60).toFixed(0).padStart(2, "0");
+  return `${h}h ${String(m).padStart(2,"0")}m ${s}s`;
+}
+function _decDMS(dec) {
+  const sign = dec >= 0 ? "+" : "−";
+  const a = Math.abs(dec);
+  const d = Math.floor(a);
+  const m = Math.floor((a - d) * 60);
+  const s = (((a - d) * 60 - m) * 60).toFixed(0).padStart(2, "0");
+  return `${sign}${d}° ${String(m).padStart(2,"0")}′ ${s}″`;
+}
+const _CONST_FR = {
+  lyra:"Lyre", cygnus:"Cygne", aquila:"Aigle", ursamajor:"Grande Ourse",
+  ursaminor:"Petite Ourse", cassiopeia:"Cassiopée", bootes:"Bouvier",
+  hercules:"Hercule", scorpius:"Scorpion", pegasus:"Pégase",
+  andromeda:"Andromède", corona:"Couronne Boréale", virgo:"Vierge",
+  leo:"Lion", sagittarius:"Sagittaire", ophiuchus:"Ophiuchus",
+  draco:"Dragon", cepheus:"Céphée", perseus:"Persée", serpens:"Serpent",
+  triangulum:"Triangle", canesvenatici:"Chiens de Chasse",
+  coma:"Chevelure de Bérénice", orion:"Orion", gemini:"Gémeaux",
+  taurus:"Taureau", auriga:"Cocher", canismajor:"Grand Chien",
+  canisminor:"Petit Chien", piscisaustrinus:"Poisson austral",
+};
+
+// Extend ATLAS_ENTRIES with all named stars + Moon entry
+const _existingIds = new Set(window.ATLAS_ENTRIES.map(e => e.id));
+
+// Add Moon entry
+if (!_existingIds.has("moon")) {
+  window.ATLAS_ENTRIES.push({
+    id: "moon", cat: "Satellite", name: "Lune", bayer: "Luna",
+    constellation: "Variable", type: "Satellite naturel de la Terre",
+    distance: "≈ 384 400 km", magnitude: "−12,7 (pleine lune)",
+    rightAscension: "Variable", declination: "Variable",
+    spectral: "—", mass: "7,34 × 10²² kg", radius: "1 737 km",
+    discovery: "Connue depuis l'Antiquité",
+    prose: [
+      "Unique satellite naturel de la Terre, la Lune orbite à une distance moyenne de 384 400 km en 27,3 jours. Ses phases cycliques résultent de sa position relative au Soleil et à la Terre.",
+      "Sa surface criblée de cratères, de mers basaltiques (<em>maria</em>) et de hautes terres (<em>terrae</em>) retrace l'histoire des bombardements météoritiques du Système solaire primitif.",
+      "Avec un diamètre apparent de 0,5°, elle est le seul corps céleste au-delà de la Terre dont on peut observer des détails à l'œil nu. Aux jumelles, Mare Imbrium et le cratère Tycho deviennent distinctement visibles."
+    ]
+  });
+}
+
+// Add one entry per named star not already present
+const _starEntries = NAMED_STARS_REAL
+  .filter(s => !_existingIds.has(s.id))
+  .map(s => ({
+    id: s.id,
+    cat: "Étoile",
+    name: s.name,
+    bayer: s.bayer,
+    constellation: _CONST_FR[s.constellation] || s.constellation,
+    type: "Étoile",
+    distance: "—",
+    magnitude: s.mag.toFixed(2),
+    rightAscension: _raHMS(s.ra),
+    declination: _decDMS(s.dec),
+    spectral: "—",
+    ra: s.ra,
+    dec: s.dec,
+    color: s.color,
+    prose: [`${s.name} (${s.bayer}) est une étoile de la constellation ${_CONST_FR[s.constellation] || s.constellation}, de magnitude ${s.mag.toFixed(2)}.`]
+  }));
+
+window.ATLAS_ENTRIES = [...window.ATLAS_ENTRIES, ..._starEntries];
