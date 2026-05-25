@@ -245,15 +245,9 @@ function useDeviceOrientation(enabled) {
           smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt, calibOffset: initOffset };
         } else {
           const s = smoothRef.current;
-          // Re-calibrate on compass only when tilt is very low (compass reliable below 15°)
-          // Slow rate (0.01) avoids any perceptible snap when returning from high tilt.
-          let calibOffset = s.calibOffset;
-          if (raw.tilt < 15) {
-            let dd = (raw.compassHeading - raw.alphaHeading) - calibOffset;
-            if (dd >  180) dd -= 360;
-            if (dd < -180) dd += 360;
-            calibOffset += dd * 0.01;
-          }
+          // calibOffset is set once at init and never updated.
+          // iPhone gyro drift is < 1° over a typical session — imperceptible on a sky map.
+          const calibOffset = s.calibOffset;
           // Stable heading = gyro + calibration offset
           const stableHeading = (raw.alphaHeading + calibOffset + 360) % 360;
           let dh = stableHeading - s.heading;
