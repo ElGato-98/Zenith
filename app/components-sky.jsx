@@ -237,12 +237,12 @@ function useDeviceOrientation(enabled) {
       //   beta = 180  → phone flat, screen down                  → tilt = -90
       // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
       // Clamp beta to [50, 160] before computing tilt.
-      // Past 160° the compass heading flips 180° (gimbal lock near zenith).
+      // Past ~130° the compass heading becomes unreliable (gimbal lock near zenith).
       const beta = Math.max(50, Math.min(160, e.beta == null ? 90 : e.beta));
-      rawRef.current = {
-        heading,
-        tilt: Math.max(-15, Math.min(70, beta - 90)),
-      };
+      const newTilt = Math.max(-15, Math.min(70, beta - 90));
+      // Freeze heading above 40° tilt — compass is unreliable near zenith.
+      const newHeading = newTilt > 40 ? (rawRef.current?.heading ?? heading) : heading;
+      rawRef.current = { heading: newHeading, tilt: newTilt };
     }
 
     // rAF loop: applies low-pass filter then updates React state (max 60 fps)
