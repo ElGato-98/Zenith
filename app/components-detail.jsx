@@ -94,6 +94,28 @@ function HeroArtwork({ obj }) {
       </svg>
     );
   }
+  if (obj.id === "sun") {
+    return (
+      <svg viewBox="0 0 390 360" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
+        <SkyDots count={50} seed={22}/>
+        <g transform="translate(195 180)">
+          <circle r="135" fill="rgba(255,215,50,0.03)"/>
+          <circle r="100" fill="rgba(255,215,50,0.06)"/>
+          <circle r="74"  fill="rgba(255,215,50,0.10)"/>
+          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a => {
+            const rad = a * Math.PI / 180;
+            return <line key={a}
+              x1={Math.cos(rad)*82} y1={Math.sin(rad)*82}
+              x2={Math.cos(rad)*114} y2={Math.sin(rad)*114}
+              stroke="rgba(255,210,40,0.50)" strokeWidth="2.5"/>;
+          })}
+          <circle r="66" fill="rgba(255,200,40,0.22)"/>
+          <circle r="52" fill="rgba(255,210,50,0.55)"/>
+          <circle r="40" fill="rgba(255,215,50,0.92)"/>
+        </g>
+      </svg>
+    );
+  }
   // étoile (default)
   return (
     <svg viewBox="0 0 390 360" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
@@ -167,7 +189,7 @@ function VisibilityArc({ peakAlt = 60 }) {
   );
 }
 
-function ObjectDetail({ obj, onClose, observer, date }) {
+function ObjectDetail({ obj, onClose, observer, date, favorites = new Set(), onToggleFav }) {
   if (!obj) return null;
   const entry = findEntry(obj) || obj;
 
@@ -207,14 +229,19 @@ function ObjectDetail({ obj, onClose, observer, date }) {
     liveStats.push({ lbl: "Magnitude", val: entry.magnitude || (obj.mag != null ? obj.mag.toFixed(2) : "—") });
     liveStats.push({ lbl: "Distance", val: entry.distance || (obj.distance != null ? obj.distance.toFixed(2) + " UA" : "—") });
     liveStats.push({ lbl: "Type", val: entry.type || "—" });
+    if (entry.spectral && entry.spectral !== "—") liveStats.push({ lbl: "Spectral", val: entry.spectral });
+    if (entry.mass    && entry.mass    !== "—") liveStats.push({ lbl: "Masse",    val: entry.mass    });
+    if (entry.radius  && entry.radius  !== "—") liveStats.push({ lbl: "Rayon",    val: entry.radius  });
     liveStats.push({ lbl: "Constellation", val: entry.constellation || (ra != null ? constellationFromRA(ra) : "—") });
     liveStats.push({ lbl: "Asc. droite", val: raToString(ra) });
     liveStats.push({ lbl: "Déclinaison", val: decToString(dec) });
   } else {
-    // fallback to entry static stats
     liveStats.push({ lbl: "Magnitude", val: entry.magnitude || "—", unit: "v" });
     liveStats.push({ lbl: "Distance", val: entry.distance || "—" });
     liveStats.push({ lbl: "Type", val: entry.type || "—" });
+    if (entry.spectral && entry.spectral !== "—") liveStats.push({ lbl: "Spectral", val: entry.spectral });
+    if (entry.mass    && entry.mass    !== "—") liveStats.push({ lbl: "Masse",    val: entry.mass    });
+    if (entry.radius  && entry.radius  !== "—") liveStats.push({ lbl: "Rayon",    val: entry.radius  });
     liveStats.push({ lbl: "Constellation", val: entry.constellation || "—" });
     liveStats.push({ lbl: "Asc. droite", val: entry.rightAscension || "—" });
     liveStats.push({ lbl: "Déclinaison", val: entry.declination || "—" });
@@ -227,7 +254,12 @@ function ObjectDetail({ obj, onClose, observer, date }) {
           <svg width="10" height="10" viewBox="0 0 10 10"><path d="M7 1 L3 5 L7 9" stroke="currentColor" strokeWidth="1" fill="none"/></svg>
           Retour
         </button>
-        <button className="detail-share">Suivre</button>
+        <button
+          className={"detail-share" + (favorites.has(entry.id) ? " is-active" : "")}
+          onClick={() => onToggleFav && onToggleFav(entry.id)}
+        >
+          {favorites.has(entry.id) ? "Suivi ✓" : "Suivre"}
+        </button>
         <div className="detail-orbits">
           <HeroArtwork obj={entry}/>
         </div>

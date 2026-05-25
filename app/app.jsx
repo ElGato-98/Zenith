@@ -45,13 +45,47 @@ function SearchButton({ onClick }) {
   );
 }
 
+function CameraButton({ on, onToggle }) {
+  return (
+    <button
+      className={"hud-btn " + (on ? "is-active" : "")}
+      onClick={onToggle}
+      title={on ? "Désactiver la caméra AR" : "Superposer la caméra"}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <rect x="1" y="3.5" width="12" height="8.5" rx="1.2" stroke="currentColor" strokeWidth="0.9"/>
+        <circle cx="7" cy="7.8" r="2.2" stroke="currentColor" strokeWidth="0.9"/>
+        <path d="M4.8 3.5 L5.4 2 H8.6 L9.2 3.5" stroke="currentColor" strokeWidth="0.9" fill="none"/>
+      </svg>
+    </button>
+  );
+}
+
 function App() {
   const [screen, setScreen] = useState("ciel");
-  const [nightMode, setNightMode] = useState(false);
+  const [nightMode, setNightMode] = useState(() => localStorage.getItem("z-night") === "1");
   const [selected, setSelected] = useState(null);
-  const [location, setLocation] = useState(LOCATIONS.find(l => l.id === "liege") || LOCATIONS[0]);
+  const [location, setLocation] = useState(() => {
+    const id = localStorage.getItem("z-loc");
+    return (id && LOCATIONS.find(l => l.id === id)) || LOCATIONS.find(l => l.id === "liege") || LOCATIONS[0];
+  });
   const [locSheetOpen, setLocSheetOpen] = useState(false);
   const [compassMode, setCompassMode] = useState(false);
+  const [cameraMode, setCameraMode] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("z-fav") || "[]")); }
+    catch(_) { return new Set(); }
+  });
+  useEffect(() => {
+    localStorage.setItem("z-fav", JSON.stringify([...favorites]));
+  }, [favorites]);
+  function toggleFavorite(id) {
+    setFavorites(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
   const { orient: deviceOrient, permState, requestPermission } = useDeviceOrientation(compassMode);
 
   async function toggleCompass() {
@@ -63,6 +97,18 @@ function App() {
     } else {
       alert("Permission refusée. Activez l'accès aux capteurs dans les réglages de Safari pour utiliser le compas.");
     }
+  }
+
+  useEffect(() => { localStorage.setItem("z-night", nightMode ? "1" : "0"); }, [nightMode]);
+  useEffect(() => { if (location.id !== "me") localStorage.setItem("z-loc", location.id); }, [location]);
+
+  async function toggleCamera() {
+    if (cameraMode) { setCameraMode(false); return; }
+    if (!compassMode) {
+      const state = await requestPermission();
+      if (state === "granted" || state === "default") setCompassMode(true);
+    }
+    setCameraMode(true);
   }
 
   // Time: we anchor on the local "tonight" range — today 18:00 to tomorrow 06:00.
@@ -131,10 +177,12 @@ function App() {
             date={currentDate}
             compassMode={compassMode}
             deviceOrient={deviceOrient}
+            cameraMode={cameraMode}
           />
           <LocationChip location={location} onOpen={() => setLocSheetOpen(true)}/>
           <div className="hud-top">
             <CompassButton on={compassMode} active={compassMode && deviceOrient != null} onToggle={toggleCompass}/>
+            <CameraButton on={cameraMode} onToggle={toggleCamera}/>
             <NightToggle on={nightMode} onToggle={() => setNightMode(n => !n)}/>
             <SearchButton onClick={gotoAtlas}/>
           </div>
@@ -160,7 +208,7 @@ function App() {
       )}
 
       {screen === "atlas" && (
-        <AtlasScreen onSelect={selectObject}/>
+        <AtlasScreen onSelect={selectObject} favorites={favorites} onToggleFav={toggleFavorite}/>
       )}
 
       {selected && (
@@ -169,6 +217,8 @@ function App() {
           onClose={() => setSelected(null)}
           observer={observer}
           date={currentDate}
+          favorites={favorites}
+          onToggleFav={toggleFavorite}
         />
       )}
 

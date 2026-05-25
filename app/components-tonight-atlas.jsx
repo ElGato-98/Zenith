@@ -84,6 +84,10 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
   const sunTimes = useMemo(() => observer && date ? getSunTimes(observer, date) : null, [observer, date]);
   const moonInfo = useMemo(() => observer && date ? getMoonInfo(observer, date) : null, [observer, date]);
   const planets = useMemo(() => observer && date ? getPlanetPositions(observer, date) : [], [observer, date]);
+  const eventsData = useMemo(() => {
+    if (!observer || !date) return [];
+    try { return getDynamicEvents(observer, date); } catch(_) { return []; }
+  }, [observer, date]);
 
   const dateStr = date ? frenchDate(date) : "";
   const dateCap = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
@@ -171,7 +175,7 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
             <h3>Évènements</h3>
             <span className="count numeral">indicatifs</span>
           </div>
-          {TONIGHT.events.map((ev, i) => (
+          {eventsData.map((ev, i) => (
             <article className="event" key={i}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
                 <span className="row-glyph" style={{ marginTop: "4px" }}>
@@ -189,13 +193,19 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
               </div>
             </article>
           ))}
+          {eventsData.length === 0 && (
+            <div style={{
+              fontFamily:"var(--serif)", fontStyle:"italic",
+              color:"var(--paper-dim)", fontSize:"14px", padding:"12px 0"
+            }}>
+              Aucun événement notable cette nuit — prochaine pluie d'étoiles ou conjonction à venir.
+            </div>
+          )}
           <div style={{
-            marginTop: "8px",
-            fontFamily: "var(--mono)", fontSize: "9px",
-            color: "var(--paper-fade)",
-            letterSpacing: "0.16em", textTransform: "uppercase"
+            marginTop:"8px", fontFamily:"var(--mono)", fontSize:"9px",
+            color:"var(--paper-fade)", letterSpacing:"0.16em", textTransform:"uppercase"
           }}>
-            * Données ISS / météores fournies à titre indicatif — calcul en temps réel à venir
+            Pluies d'étoiles · conjonctions · phases lunaires — calcul astronomique en temps réel
           </div>
         </section>
 
@@ -284,6 +294,21 @@ function MiniArt({ entry }) {
       </svg>
     );
   }
+  if (entry.id === "sun") {
+    return (
+      <svg viewBox="0 0 60 60" width="100%" height="100%">
+        {[0,45,90,135,180,225,270,315].map(a => {
+          const rad = a * Math.PI / 180;
+          return <line key={a}
+            x1={30 + Math.cos(rad)*14} y1={30 + Math.sin(rad)*14}
+            x2={30 + Math.cos(rad)*22} y2={30 + Math.sin(rad)*22}
+            stroke="rgba(255,215,50,0.75)" strokeWidth="1.4"/>;
+        })}
+        <circle cx="30" cy="30" r="11" fill="rgba(255,215,50,0.22)"/>
+        <circle cx="30" cy="30" r="8"  fill="rgba(255,215,50,0.80)"/>
+      </svg>
+    );
+  }
   // étoile
   return (
     <svg viewBox="0 0 60 60" width="100%" height="100%">
@@ -295,10 +320,30 @@ function MiniArt({ entry }) {
   );
 }
 
-function AtlasScreen({ onSelect }) {
+function AtlasCard({ e, onSelect, badge }) {
+  return (
+    <div className={"atlas-card" + (badge ? " is-watched" : "")} onClick={() => onSelect(e)}>
+      <div className="atlas-card-thumb"><MiniArt entry={e}/></div>
+      <div className="atlas-card-main">
+        <div className="atlas-card-cat">{e.cat} · {e.bayer}</div>
+        <div className="atlas-card-name">{e.name}</div>
+        <div className="atlas-card-meta">{e.constellation} — m {e.magnitude}</div>
+      </div>
+      {badge
+        ? <div className="atlas-card-badge">★</div>
+        : <div className="atlas-card-arrow">→</div>
+      }
+    </div>
+  );
+}
+
+function AtlasScreen({ onSelect, favorites = new Set(), onToggleFav }) {
   const [filter, setFilter] = useState("Tous");
   const [query, setQuery] = useState("");
   const tabs = ["Tous", "Étoile", "Planète", "Galaxie", "Nébuleuse", "Amas globulaire", "Satellite"];
+
+  const favEntries = ATLAS_ENTRIES.filter(e => favorites.has(e.id));
+
   const filtered = ATLAS_ENTRIES.filter(e => {
     if (filter !== "Tous" && e.cat !== filter) return false;
     if (query && !(e.name + " " + e.bayer).toLowerCase().includes(query.toLowerCase())) return false;
@@ -309,7 +354,7 @@ function AtlasScreen({ onSelect }) {
     <div className="atlas screen-enter">
       <div className="atlas-body no-scrollbar">
         <header className="atlas-header">
-          <div className="tonight-eyebrow">Catalogue · 8 entrées · 14 millions à venir</div>
+          <div className="tonight-eyebrow">Catalogue · {ATLAS_ENTRIES.length} entrées</div>
           <h1 className="atlas-title">Atlas</h1>
           <div className="atlas-sub">parcourez le ciel, étoile par étoile</div>
           <div className="atlas-search">
@@ -325,6 +370,22 @@ function AtlasScreen({ onSelect }) {
             />
           </div>
         </header>
+
+        {favEntries.length > 0 && (
+          <div className="atlas-watched">
+            <div className="atlas-watched-header">
+              <span className="atlas-watched-star">★</span>
+              Objets suivis
+              <span className="atlas-watched-count">{favEntries.length}</span>
+            </div>
+            <div className="atlas-list">
+              {favEntries.map(e => (
+                <AtlasCard key={e.id} e={e} onSelect={onSelect} badge={true}/>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="atlas-tabs">
           {tabs.map(t => (
             <button key={t}
@@ -334,15 +395,7 @@ function AtlasScreen({ onSelect }) {
         </div>
         <div className="atlas-list">
           {filtered.map(e => (
-            <div className="atlas-card" key={e.id} onClick={() => onSelect(e)}>
-              <div className="atlas-card-thumb"><MiniArt entry={e}/></div>
-              <div className="atlas-card-main">
-                <div className="atlas-card-cat">{e.cat} · {e.bayer}</div>
-                <div className="atlas-card-name">{e.name}</div>
-                <div className="atlas-card-meta">{e.constellation} — m {e.magnitude}</div>
-              </div>
-              <div className="atlas-card-arrow">→</div>
-            </div>
+            <AtlasCard key={e.id} e={e} onSelect={onSelect} badge={favorites.has(e.id)}/>
           ))}
           {filtered.length === 0 && (
             <div style={{

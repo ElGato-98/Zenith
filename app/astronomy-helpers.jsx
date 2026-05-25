@@ -114,6 +114,25 @@ function moonPhaseName(angle) {
   return "Dernier croissant";
 }
 
+/* Sun: current position + rise/set */
+function getSunInfo(observer, date) {
+  const equ = Astronomy.Equator("Sun", date, observer, true, true);
+  const hor = Astronomy.Horizon(date, observer, equ.ra, equ.dec, "normal");
+  let rise = null, set = null;
+  try {
+    const rEvt = Astronomy.SearchRiseSet("Sun", observer, +1, date, 1);
+    if (rEvt) rise = rEvt.date;
+    const sEvt = Astronomy.SearchRiseSet("Sun", observer, -1, date, 1);
+    if (sEvt) set = sEvt.date;
+  } catch(_) {}
+  return {
+    az: hor.azimuth, alt: hor.altitude,
+    ra: equ.ra, dec: equ.dec,
+    rise, set,
+    constellation: constellationFromRA(equ.ra)
+  };
+}
+
 /* Sun: rise/set + astronomical twilight (-18°) */
 function getSunTimes(observer, date) {
   // Use start of local day (00:00) for searching
@@ -210,10 +229,118 @@ function getStarVisibility(ra, dec, observer, baseDate) {
   return { rise, culm, set, peakAlt };
 }
 
+/* Annual meteor shower calendar */
+const METEOR_SHOWERS = [
+  { name: "Quadrantides",  peak: [1,  4],  rate: 120, radiant: "Bouvier"       },
+  { name: "Lyrides",       peak: [4,  22], rate: 20,  radiant: "Lyre"          },
+  { name: "η-Aquarides",   peak: [5,  6],  rate: 60,  radiant: "Verseau"       },
+  { name: "δ-Aquarides",   peak: [7,  30], rate: 25,  radiant: "Verseau"       },
+  { name: "Perséides",     peak: [8,  12], rate: 100, radiant: "Persée"        },
+  { name: "Draconides",    peak: [10, 8],  rate: 10,  radiant: "Dragon"        },
+  { name: "Orionides",     peak: [10, 21], rate: 25,  radiant: "Orion"         },
+  { name: "Léonides",      peak: [11, 18], rate: 15,  radiant: "Lion"          },
+  { name: "Géminides",     peak: [12, 14], rate: 150, radiant: "Gémeaux"       },
+  { name: "Ursides",       peak: [12, 22], rate: 10,  radiant: "Petite Ourse"  },
+];
+
+function _angularSep(ra1, dec1, ra2, dec2) {
+  const d1 = dec1 * Math.PI / 180, d2 = dec2 * Math.PI / 180;
+  const da = (ra2 - ra1) * 15 * Math.PI / 180;
+  return Math.acos(Math.max(-1, Math.min(1,
+    Math.sin(d1)*Math.sin(d2) + Math.cos(d1)*Math.cos(d2)*Math.cos(da)
+  ))) * 180 / Math.PI;
+}
+
+function getDynamicEvents(observer, date) {
+  const events = [];
+
+  // 1. Meteor showers active within ±3 days of peak
+  const doy = d => { const s = new Date(d.getFullYear(),0,0); return Math.floor((d-s)/86400000); };
+  const curDoy = doy(date);
+  for (const sh of METEOR_SHOWERS) {
+    const peakDoy = doy(new Date(date.getFullYear(), sh.peak[0]-1, sh.peak[1]));
+    let diff = peakDoy - curDoy;
+    if (diff >  182) diff -= 365;
+    if (diff < -182) diff += 365;
+    if (Math.abs(diff) > 3) continue;
+    const when = diff === 0 ? "Ce soir — pic"
+                : diff > 0 ? `Pic dans ${diff} jour${diff > 1 ? "s" : ""}`
+                : `Retombée — pic il y a ${-diff} jour${-diff > 1 ? "s" : ""}`;
+    events.push({
+      when,
+      name: `Pluie des ${sh.name}`,
+      detail: `Radiant dans ${sh.radiant}. Meilleure observation après minuit, face au radiant.`,
+      peak: `≈ ${sh.rate} météores/h`,
+      tag: "meteors"
+    });
+  }
+
+  // 2. Planetary conjunctions (angular separation < 5°, both above horizon)
+  const BODIES = ["Mercury","Venus","Mars","Jupiter","Saturn","Moon"];
+  const NAMES  = { Mercury:"Mercure", Venus:"Vénus", Mars:"Mars", Jupiter:"Jupiter", Saturn:"Saturne", Moon:"Lune" };
+  const pos = {};
+  for (const body of BODIES) {
+    try {
+      const equ = Astronomy.Equator(body, date, observer, true, true);
+      const hor = Astronomy.Horizon(date, observer, equ.ra, equ.dec, "normal");
+      if (hor.altitude > 5) pos[body] = { ra: equ.ra, dec: equ.dec, alt: hor.altitude };
+    } catch(_) {}
+  }
+  const bKeys = Object.keys(pos);
+  for (let i = 0; i < bKeys.length; i++) {
+    for (let j = i+1; j < bKeys.length; j++) {
+      const a = pos[bKeys[i]], b = pos[bKeys[j]];
+      const sep = _angularSep(a.ra, a.dec, b.ra, b.dec);
+      if (sep < 5) {
+        const avgAlt = Math.round((a.alt + b.alt) / 2);
+        events.push({
+          when: "Cette nuit",
+          name: `Conjonction ${NAMES[bKeys[i]]}–${NAMES[bKeys[j]]}`,
+          detail: `Séparation angulaire ${sep.toFixed(1)}°. Visibles dans le même champ de jumelles.`,
+          peak: `alt. ${avgAlt}°`,
+          tag: "conjunction"
+        });
+      }
+    }
+  }
+
+  // 3. Moon phases within next 3 days
+  try {
+    const nextFull = Astronomy.SearchMoonPhase(180, date, 30);
+    if (nextFull) {
+      const days = (nextFull.date - date) / 86400000;
+      if (days >= 0 && days <= 3) {
+        events.push({
+          when: days < 0.5 ? "Ce soir" : `Dans ${Math.ceil(days)} jour${Math.ceil(days) > 1 ? "s" : ""}`,
+          name: "Pleine Lune",
+          detail: "Illumination maximale. Nuits très lumineuses — observation des objets faibles difficile.",
+          peak: "100% d'illumination",
+          tag: "conjunction"
+        });
+      }
+    }
+    const nextNew = Astronomy.SearchMoonPhase(0, date, 30);
+    if (nextNew) {
+      const days = (nextNew.date - date) / 86400000;
+      if (days >= 0 && days <= 3) {
+        events.push({
+          when: `Dans ${Math.ceil(days)} jour${Math.ceil(days) > 1 ? "s" : ""}`,
+          name: "Nouvelle Lune",
+          detail: "Absence de Lune dans le ciel — conditions idéales pour les objets du ciel profond.",
+          peak: "0% d'illumination",
+          tag: "conjunction"
+        });
+      }
+    }
+  } catch(_) {}
+
+  return events;
+}
+
 Object.assign(window, {
   getStarVisibility,
   makeObserver, equatorialToHorizontal, computeStarsPositions,
-  getPlanetPositions, getMoonInfo, getSunTimes,
+  getPlanetPositions, getMoonInfo, getSunInfo, getSunTimes,
   moonPhaseName, formatTime, formatDateShort, frenchDate,
-  constellationFromRA
+  constellationFromRA, getDynamicEvents
 });
