@@ -223,59 +223,43 @@ function useDeviceOrientation(enabled) {
 
     // Event handler only writes to a ref — no React state, no render
     function handler(e) {
-      if (e.alpha == null || e.beta == null || e.gamma == null) return;
+      if (e.beta == null || e.gamma == null) return;
 
-      const a = e.alpha * Math.PI / 180;
       const b = e.beta  * Math.PI / 180;
       const g = e.gamma * Math.PI / 180;
 
-      // Full ZXY rotation matrix applied to camera direction [-Z device frame].
-      // This gives the true 3D pointing vector — no Euler singularity at any tilt.
-      const cx = -(Math.cos(a)*Math.sin(g) + Math.sin(a)*Math.sin(b)*Math.cos(g));
-      const cy = -(Math.sin(a)*Math.sin(g) - Math.cos(a)*Math.sin(b)*Math.cos(g));
-      const cz = -(Math.cos(b)*Math.cos(g));
-
-      // Azimuth from the horizontal projection (alpha-frame, calibrated below)
-      const azRaw = ((Math.atan2(cx, cy) * 180/Math.PI) + 360) % 360;
-      // Altitude directly from the Z component — no beta formula, no singularity
-      const tilt  = Math.max(-15, Math.min(80,
+      // Tilt (altitude above horizon) from the camera's Z component in world frame.
+      // cz = -(cos β · cos γ): 0° at beta=90° (upright/horizon), 90° at beta=180° (zenith).
+      const cz   = -(Math.cos(b) * Math.cos(g));
+      const tilt = Math.max(-15, Math.min(80,
         Math.asin(Math.max(-1, Math.min(1, cz))) * 180/Math.PI));
 
-      rawRef.current = {
-        azRaw,
-        compassHeading: e.webkitCompassHeading ?? azRaw,
-        tilt,
-      };
+      // Heading: use the hardware compass directly — no matrix drift.
+      const compassHeading = e.webkitCompassHeading ?? (e.alpha ?? 0);
+
+      rawRef.current = { compassHeading, tilt };
     }
 
-    // rAF loop: low-pass filter + one-time north calibration
-    const ALPHA = 0.2;
+    // rAF loop: low-pass filter. Freezes heading on >150° jumps (iOS compass flip at high tilt).
+    const SMOOTH = 0.2;
 
     function tick() {
       if (rawRef.current) {
         const raw = rawRef.current;
         if (!smoothRef.current) {
-          const initOffset = raw.compassHeading - raw.azRaw;
-          smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt, calibOffset: initOffset };
+          smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt };
         } else {
           const s = smoothRef.current;
-          // Re-calibrate only when tilt is low AND compass agrees within 45°
-          // (ignores post-flip states where compass jumped 180°)
-          let calibOffset = s.calibOffset;
-          if (raw.tilt < 20) {
-            let dd = (raw.compassHeading - raw.azRaw) - calibOffset;
-            if (dd >  180) dd -= 360;
-            if (dd < -180) dd += 360;
-            if (Math.abs(dd) < 45) calibOffset += dd * 0.02;
-          }
-          const stableHeading = (raw.azRaw + calibOffset + 360) % 360;
-          let dh = stableHeading - s.heading;
+          let dh = raw.compassHeading - s.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
+          // iOS flips webkitCompassHeading ~180° when tilt crosses ~45°.
+          // A genuine 180° turn while sky-gazing is physically implausible,
+          // so freeze heading on any jump > 150°.
+          if (Math.abs(dh) > 150) dh = 0;
           smoothRef.current = {
-            heading:     (s.heading + dh * ALPHA + 360) % 360,
-            tilt:        s.tilt + (raw.tilt - s.tilt) * ALPHA,
-            calibOffset,
+            heading: (s.heading + dh * SMOOTH + 360) % 360,
+            tilt:     s.tilt + (raw.tilt - s.tilt) * SMOOTH,
           };
         }
         setOrient({ ...smoothRef.current });
