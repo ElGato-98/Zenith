@@ -245,13 +245,14 @@ function useDeviceOrientation(enabled) {
           smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt, calibOffset: initOffset };
         } else {
           const s = smoothRef.current;
-          // Re-calibrate on compass only when tilt is low (compass reliable below 25°)
+          // Re-calibrate on compass only when tilt is very low (compass reliable below 15°)
+          // Slow rate (0.01) avoids any perceptible snap when returning from high tilt.
           let calibOffset = s.calibOffset;
-          if (raw.tilt < 25) {
+          if (raw.tilt < 15) {
             let dd = (raw.compassHeading - raw.alphaHeading) - calibOffset;
             if (dd >  180) dd -= 360;
             if (dd < -180) dd += 360;
-            calibOffset += dd * 0.05;
+            calibOffset += dd * 0.01;
           }
           // Stable heading = gyro + calibration offset
           const stableHeading = (raw.alphaHeading + calibOffset + 360) % 360;
