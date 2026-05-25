@@ -550,6 +550,16 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     return best;
   }, [namedProjected, planetProjected, moonProjected, sunProjected, size]);
 
+  // Debounced label: 350ms to attach, 700ms to detach — avoids flicker on brief misses
+  const labelTimerRef = useRef(null);
+  const [displayedTarget, setDisplayedTarget] = useState(null);
+  useEffect(() => {
+    if (labelTimerRef.current) clearTimeout(labelTimerRef.current);
+    const delay = reticleTarget ? 350 : 700;
+    labelTimerRef.current = setTimeout(() => setDisplayedTarget(reticleTarget), delay);
+    return () => clearTimeout(labelTimerRef.current);
+  }, [reticleTarget?.id]);
+
   const constellationLabels = useMemo(() => {
     const byConst = {};
     for (const s of namedProjected) {
@@ -770,18 +780,18 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       <CompassStrip heading={effHeading}/>
       <Reticle visible={true}/>
 
-      {reticleTarget && (
+      {displayedTarget && (
         <div className="scope-label">
           <span className="scope-label-line"></span>
-          <div className="scope-label-name">{reticleTarget.name}</div>
+          <div className="scope-label-name">{displayedTarget.name}</div>
           <div className="scope-label-meta">
-            {reticleTarget.kind === "moon"
-              ? `${reticleTarget.phaseName} · ${Math.round(reticleTarget.illumination * 100)}%`
-              : reticleTarget.kind === "sun"
-              ? `alt ${reticleTarget.alt?.toFixed(0) ?? "—"}° · ${reticleTarget.constellation || "—"}`
-              : reticleTarget.kind === "planet"
-              ? `m ${reticleTarget.mag?.toFixed(1) ?? "—"} · alt ${reticleTarget.alt?.toFixed(0) ?? "—"}°`
-              : `m ${reticleTarget.mag?.toFixed(2) ?? "—"} · ${reticleTarget.bayer || reticleTarget.constellation || "—"}`
+            {displayedTarget.kind === "moon"
+              ? `${displayedTarget.phaseName} · ${Math.round(displayedTarget.illumination * 100)}%`
+              : displayedTarget.kind === "sun"
+              ? `alt ${displayedTarget.alt?.toFixed(0) ?? "—"}° · ${displayedTarget.constellation || "—"}`
+              : displayedTarget.kind === "planet"
+              ? `m ${displayedTarget.mag?.toFixed(1) ?? "—"} · alt ${displayedTarget.alt?.toFixed(0) ?? "—"}°`
+              : `m ${displayedTarget.mag?.toFixed(2) ?? "—"} · ${displayedTarget.bayer || displayedTarget.constellation || "—"}`
             }
           </div>
         </div>

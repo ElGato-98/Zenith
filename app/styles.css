@@ -378,6 +378,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   letter-spacing: 0.16em; text-transform: uppercase;
   z-index: 16; pointer-events: none;
   white-space: nowrap;
+  transition: opacity 0.25s ease;
 }
 .scope-label-line {
   position: absolute; right: 100%; top: 50%;
