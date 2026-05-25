@@ -223,40 +223,52 @@ function useDeviceOrientation(enabled) {
 
     // Event handler only writes to a ref — no React state, no render
     function handler(e) {
-      if (e.alpha == null || e.beta == null) return;
-      const beta = e.beta;
-      const tilt = Math.max(-15, Math.min(75, beta - 90));
-      // alphaHeading: gyroscope Z axis — stable at all tilt angles, no gimbal lock.
-      // compassHeading: webkitCompassHeading — accurate but flips ~45° on iOS.
-      // Strategy: use alphaHeading as primary, re-calibrate on compass when tilt < 25°.
-      const alphaHeading = (360 - e.alpha) % 360;
-      const compassHeading = e.webkitCompassHeading ?? alphaHeading;
-      rawRef.current = { alphaHeading, compassHeading, tilt };
+      if (e.alpha == null || e.beta == null || e.gamma == null) return;
+
+      const a = e.alpha * Math.PI / 180;
+      const b = e.beta  * Math.PI / 180;
+      const g = e.gamma * Math.PI / 180;
+
+      // Full ZXY rotation matrix applied to camera direction [-Z device frame].
+      // This gives the true 3D pointing vector — no Euler singularity at any tilt.
+      const cx = -(Math.cos(a)*Math.sin(g) + Math.sin(a)*Math.sin(b)*Math.cos(g));
+      const cy = -(Math.sin(a)*Math.sin(g) - Math.cos(a)*Math.sin(b)*Math.cos(g));
+      const cz = -(Math.cos(b)*Math.cos(g));
+
+      // Azimuth from the horizontal projection (alpha-frame, calibrated below)
+      const azRaw = ((Math.atan2(cx, cy) * 180/Math.PI) + 360) % 360;
+      // Altitude directly from the Z component — no beta formula, no singularity
+      const tilt  = Math.max(-15, Math.min(80,
+        Math.asin(Math.max(-1, Math.min(1, cz))) * 180/Math.PI));
+
+      rawRef.current = {
+        azRaw,
+        compassHeading: e.webkitCompassHeading ?? azRaw,
+        tilt,
+      };
     }
 
-    // rAF loop: low-pass filter + gyro/compass fusion
+    // rAF loop: low-pass filter + one-time north calibration
     const ALPHA = 0.2;
 
     function tick() {
       if (rawRef.current) {
         const raw = rawRef.current;
         if (!smoothRef.current) {
-          const initOffset = raw.compassHeading - raw.alphaHeading;
+          const initOffset = raw.compassHeading - raw.azRaw;
           smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt, calibOffset: initOffset };
         } else {
           const s = smoothRef.current;
-          // Recalibrate only when:
-          //  1. tilt is low (compass reliable)
-          //  2. compass and gyro agree within 45° (ignore post-flip states)
+          // Re-calibrate only when tilt is low AND compass agrees within 45°
+          // (ignores post-flip states where compass jumped 180°)
           let calibOffset = s.calibOffset;
           if (raw.tilt < 20) {
-            let dd = (raw.compassHeading - raw.alphaHeading) - calibOffset;
+            let dd = (raw.compassHeading - raw.azRaw) - calibOffset;
             if (dd >  180) dd -= 360;
             if (dd < -180) dd += 360;
             if (Math.abs(dd) < 45) calibOffset += dd * 0.02;
           }
-          // Stable heading = gyro + calibration offset
-          const stableHeading = (raw.alphaHeading + calibOffset + 360) % 360;
+          const stableHeading = (raw.azRaw + calibOffset + 360) % 360;
           let dh = stableHeading - s.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
