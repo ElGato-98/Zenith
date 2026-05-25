@@ -148,20 +148,28 @@ function PlanetMark({ p, x, y, onTap, nightMode }) {
 function useDeviceOrientation(enabled) {
   const [orient, setOrient] = useState(null);
   const [permState, setPermState] = useState("idle"); // idle | granted | denied | unsupported
+  const rawRef    = useRef(null); // latest sensor reading, written in event handler
+  const smoothRef = useRef(null); // low-pass filtered value
+  const rafRef    = useRef(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      rawRef.current = null; smoothRef.current = null;
+      setOrient(null);
+      return;
+    }
     if (typeof DeviceOrientationEvent === "undefined") {
       setPermState("unsupported");
       return;
     }
+
+    // Event handler only writes to a ref — no React state, no render
     function handler(e) {
       let heading;
       if (e.webkitCompassHeading !== undefined) {
-        // iOS Safari: true compass heading, 0=N clockwise
         heading = e.webkitCompassHeading;
       } else if (e.alpha !== null) {
-        // Other browsers: alpha is rotation around z; rough heading
         heading = (360 - e.alpha) % 360;
       } else {
         return;
@@ -172,11 +180,45 @@ function useDeviceOrientation(enabled) {
       //   beta = 180  → phone flat, screen down                  → tilt = -90
       // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
       const beta = e.beta == null ? 90 : e.beta;
-      const tilt = Math.max(-15, Math.min(90, 90 - beta));
-      setOrient({ heading, tilt });
+      rawRef.current = {
+        heading,
+        tilt: Math.max(-15, Math.min(90, 90 - beta)),
+      };
     }
+
+    // rAF loop: applies low-pass filter then updates React state (max 60 fps)
+    // ALPHA controls the smoothing: lower = smoother but more lag.
+    // 0.2 ≈ 3-frame lag at 60 fps (~50 ms) — responsive and jitter-free.
+    const ALPHA = 0.2;
+
+    function tick() {
+      if (rawRef.current) {
+        const raw = rawRef.current;
+        if (!smoothRef.current) {
+          smoothRef.current = { heading: raw.heading, tilt: raw.tilt };
+        } else {
+          // Heading interpolation that handles the 0°/360° wraparound
+          let dh = raw.heading - smoothRef.current.heading;
+          if (dh >  180) dh -= 360;
+          if (dh < -180) dh += 360;
+          smoothRef.current = {
+            heading: (smoothRef.current.heading + dh * ALPHA + 360) % 360,
+            tilt:    smoothRef.current.tilt + (raw.tilt - smoothRef.current.tilt) * ALPHA,
+          };
+        }
+        setOrient({ ...smoothRef.current });
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
     window.addEventListener("deviceorientation", handler, true);
-    return () => window.removeEventListener("deviceorientation", handler, true);
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener("deviceorientation", handler, true);
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      rawRef.current = null; smoothRef.current = null;
+    };
   }, [enabled]);
 
   function requestPermission() {
