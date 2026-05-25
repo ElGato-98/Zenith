@@ -850,6 +850,28 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 .atlas-tab.is-active {
   color: var(--ink); background: var(--paper); border-color: var(--paper);
 }
+.atlas-watched {
+  border-bottom: 1px solid var(--paper-trace);
+  padding-bottom: 4px;
+}
+.atlas-watched-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 18px 22px 0;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--paper-fade);
+}
+.atlas-watched-star { color: #c8a84b; font-size: 11px; }
+.atlas-watched-count {
+  margin-left: auto;
+  color: var(--paper-fade);
+}
+.atlas-card.is-watched { background: rgba(200, 168, 75, 0.04); }
+.atlas-card-badge {
+  color: #c8a84b;
+  font-size: 13px;
+  line-height: 1;
+}
 .atlas-list {
   padding: 8px 22px;
 }

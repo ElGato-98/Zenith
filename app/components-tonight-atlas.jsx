@@ -320,10 +320,30 @@ function MiniArt({ entry }) {
   );
 }
 
-function AtlasScreen({ onSelect }) {
+function AtlasCard({ e, onSelect, badge }) {
+  return (
+    <div className={"atlas-card" + (badge ? " is-watched" : "")} onClick={() => onSelect(e)}>
+      <div className="atlas-card-thumb"><MiniArt entry={e}/></div>
+      <div className="atlas-card-main">
+        <div className="atlas-card-cat">{e.cat} · {e.bayer}</div>
+        <div className="atlas-card-name">{e.name}</div>
+        <div className="atlas-card-meta">{e.constellation} — m {e.magnitude}</div>
+      </div>
+      {badge
+        ? <div className="atlas-card-badge">★</div>
+        : <div className="atlas-card-arrow">→</div>
+      }
+    </div>
+  );
+}
+
+function AtlasScreen({ onSelect, favorites = new Set(), onToggleFav }) {
   const [filter, setFilter] = useState("Tous");
   const [query, setQuery] = useState("");
   const tabs = ["Tous", "Étoile", "Planète", "Galaxie", "Nébuleuse", "Amas globulaire", "Satellite"];
+
+  const favEntries = ATLAS_ENTRIES.filter(e => favorites.has(e.id));
+
   const filtered = ATLAS_ENTRIES.filter(e => {
     if (filter !== "Tous" && e.cat !== filter) return false;
     if (query && !(e.name + " " + e.bayer).toLowerCase().includes(query.toLowerCase())) return false;
@@ -350,6 +370,22 @@ function AtlasScreen({ onSelect }) {
             />
           </div>
         </header>
+
+        {favEntries.length > 0 && (
+          <div className="atlas-watched">
+            <div className="atlas-watched-header">
+              <span className="atlas-watched-star">★</span>
+              Objets suivis
+              <span className="atlas-watched-count">{favEntries.length}</span>
+            </div>
+            <div className="atlas-list">
+              {favEntries.map(e => (
+                <AtlasCard key={e.id} e={e} onSelect={onSelect} badge={true}/>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="atlas-tabs">
           {tabs.map(t => (
             <button key={t}
@@ -359,15 +395,7 @@ function AtlasScreen({ onSelect }) {
         </div>
         <div className="atlas-list">
           {filtered.map(e => (
-            <div className="atlas-card" key={e.id} onClick={() => onSelect(e)}>
-              <div className="atlas-card-thumb"><MiniArt entry={e}/></div>
-              <div className="atlas-card-main">
-                <div className="atlas-card-cat">{e.cat} · {e.bayer}</div>
-                <div className="atlas-card-name">{e.name}</div>
-                <div className="atlas-card-meta">{e.constellation} — m {e.magnitude}</div>
-              </div>
-              <div className="atlas-card-arrow">→</div>
-            </div>
+            <AtlasCard key={e.id} e={e} onSelect={onSelect} badge={favorites.has(e.id)}/>
           ))}
           {filtered.length === 0 && (
             <div style={{

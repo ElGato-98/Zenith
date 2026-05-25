@@ -208,7 +208,7 @@ function App() {
       )}
 
       {screen === "atlas" && (
-        <AtlasScreen onSelect={selectObject}/>
+        <AtlasScreen onSelect={selectObject} favorites={favorites} onToggleFav={toggleFavorite}/>
       )}
 
       {selected && (
