@@ -349,6 +349,7 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   const dragRef = useRef(null);
   const pointersRef = useRef({});
   const pinchRef = useRef(null);
+  const lastTapRef = useRef(0);
   const plateCanvasRef = useRef(null);
   const videoRef = useCameraStream(cameraMode);
   const [zoom, setZoom] = useState(1);
@@ -400,8 +401,17 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       dragRef.current = null;
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       pinchRef.current = { dist0: dist, zoom0: zoom };
-    } else if (pts.length === 1 && !compassMode) {
-      dragRef.current = { x: e.clientX, y: e.clientY, h0: heading, t0: tilt };
+    } else if (pts.length === 1) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        setZoom(1);
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+      if (!compassMode) {
+        dragRef.current = { x: e.clientX, y: e.clientY, h0: heading, t0: tilt };
+      }
     }
     e.currentTarget.setPointerCapture(e.pointerId);
   }
