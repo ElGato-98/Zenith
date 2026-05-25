@@ -229,14 +229,19 @@ function ObjectDetail({ obj, onClose, observer, date }) {
     liveStats.push({ lbl: "Magnitude", val: entry.magnitude || (obj.mag != null ? obj.mag.toFixed(2) : "—") });
     liveStats.push({ lbl: "Distance", val: entry.distance || (obj.distance != null ? obj.distance.toFixed(2) + " UA" : "—") });
     liveStats.push({ lbl: "Type", val: entry.type || "—" });
+    if (entry.spectral && entry.spectral !== "—") liveStats.push({ lbl: "Spectral", val: entry.spectral });
+    if (entry.mass    && entry.mass    !== "—") liveStats.push({ lbl: "Masse",    val: entry.mass    });
+    if (entry.radius  && entry.radius  !== "—") liveStats.push({ lbl: "Rayon",    val: entry.radius  });
     liveStats.push({ lbl: "Constellation", val: entry.constellation || (ra != null ? constellationFromRA(ra) : "—") });
     liveStats.push({ lbl: "Asc. droite", val: raToString(ra) });
     liveStats.push({ lbl: "Déclinaison", val: decToString(dec) });
   } else {
-    // fallback to entry static stats
     liveStats.push({ lbl: "Magnitude", val: entry.magnitude || "—", unit: "v" });
     liveStats.push({ lbl: "Distance", val: entry.distance || "—" });
     liveStats.push({ lbl: "Type", val: entry.type || "—" });
+    if (entry.spectral && entry.spectral !== "—") liveStats.push({ lbl: "Spectral", val: entry.spectral });
+    if (entry.mass    && entry.mass    !== "—") liveStats.push({ lbl: "Masse",    val: entry.mass    });
+    if (entry.radius  && entry.radius  !== "—") liveStats.push({ lbl: "Rayon",    val: entry.radius  });
     liveStats.push({ lbl: "Constellation", val: entry.constellation || "—" });
     liveStats.push({ lbl: "Asc. droite", val: entry.rightAscension || "—" });
     liveStats.push({ lbl: "Déclinaison", val: entry.declination || "—" });
