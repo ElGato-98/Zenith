@@ -167,12 +167,12 @@ function useDeviceOrientation(enabled) {
         return;
       }
       // beta is front-back tilt. In portrait:
-      //   beta = 0    → phone flat, screen up
-      //   beta = 90   → phone vertical (camera facing horizon)
-      //   beta = 180  → phone flat, screen down (camera at zenith)
-      // So tilt = beta - 90  maps vertical→horizon (0°) and tilted back→up (toward 90°).
+      //   beta = 90   → phone vertical (camera facing horizon)  → tilt = 0
+      //   beta = 0    → phone flat, screen up (camera facing sky) → tilt = 90
+      //   beta = 180  → phone flat, screen down                  → tilt = -90
+      // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
       const beta = e.beta == null ? 90 : e.beta;
-      const tilt = Math.max(-15, Math.min(90, beta - 90));
+      const tilt = Math.max(-15, Math.min(90, 90 - beta));
       setOrient({ heading, tilt });
     }
     window.addEventListener("deviceorientation", handler, true);
