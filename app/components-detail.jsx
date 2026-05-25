@@ -189,7 +189,7 @@ function VisibilityArc({ peakAlt = 60 }) {
   );
 }
 
-function ObjectDetail({ obj, onClose, observer, date }) {
+function ObjectDetail({ obj, onClose, observer, date, favorites = new Set(), onToggleFav }) {
   if (!obj) return null;
   const entry = findEntry(obj) || obj;
 
@@ -254,7 +254,12 @@ function ObjectDetail({ obj, onClose, observer, date }) {
           <svg width="10" height="10" viewBox="0 0 10 10"><path d="M7 1 L3 5 L7 9" stroke="currentColor" strokeWidth="1" fill="none"/></svg>
           Retour
         </button>
-        <button className="detail-share">Suivre</button>
+        <button
+          className={"detail-share" + (favorites.has(entry.id) ? " is-active" : "")}
+          onClick={() => onToggleFav && onToggleFav(entry.id)}
+        >
+          {favorites.has(entry.id) ? "Suivi ✓" : "Suivre"}
+        </button>
         <div className="detail-orbits">
           <HeroArtwork obj={entry}/>
         </div>

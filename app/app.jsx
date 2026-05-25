@@ -72,6 +72,20 @@ function App() {
   const [locSheetOpen, setLocSheetOpen] = useState(false);
   const [compassMode, setCompassMode] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("z-fav") || "[]")); }
+    catch(_) { return new Set(); }
+  });
+  useEffect(() => {
+    localStorage.setItem("z-fav", JSON.stringify([...favorites]));
+  }, [favorites]);
+  function toggleFavorite(id) {
+    setFavorites(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
   const { orient: deviceOrient, permState, requestPermission } = useDeviceOrientation(compassMode);
 
   async function toggleCompass() {
@@ -203,6 +217,8 @@ function App() {
           onClose={() => setSelected(null)}
           observer={observer}
           date={currentDate}
+          favorites={favorites}
+          onToggleFav={toggleFavorite}
         />
       )}
 

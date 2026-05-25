@@ -507,6 +507,11 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   border-radius: 999px;
   cursor: pointer;
 }
+.detail-share.is-active {
+  background: #c8a84b;
+  border-color: #c8a84b;
+  color: #0a0908;
+}
 .detail-orbits { position: absolute; inset: 0; }
 .detail-id {
   position: absolute; top: 100px; left: 22px; right: 22px; z-index: 4;
