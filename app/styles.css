@@ -202,7 +202,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 .plate-btn {
   position: absolute; bottom: 92px; right: 16px; z-index: 30;
   background: rgba(6,5,4,0.72); border: 1px solid rgba(232,228,216,0.22);
-  color: rgba(232,228,216,0.75); font-family: var(--font-mono);
+  color: rgba(232,228,216,0.75); font-family: var(--mono);
   font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
   padding: 7px 14px; border-radius: 20px; backdrop-filter: blur(8px);
   transition: color 0.2s, border-color 0.2s;
@@ -508,9 +508,14 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   cursor: pointer;
 }
 .detail-share.is-active {
-  background: #c8a84b;
-  border-color: #c8a84b;
-  color: #0a0908;
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--ink);
+}
+.app.night .detail-share.is-active {
+  background: var(--paper-dim);
+  border-color: var(--paper);
+  color: var(--ink);
 }
 .detail-orbits { position: absolute; inset: 0; }
 .detail-id {
@@ -861,17 +866,20 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--paper-fade);
 }
-.atlas-watched-star { color: #c8a84b; font-size: 11px; }
+.atlas-watched-star { color: var(--amber); font-size: 11px; }
 .atlas-watched-count {
   margin-left: auto;
   color: var(--paper-fade);
 }
 .atlas-card.is-watched { background: rgba(200, 168, 75, 0.04); }
 .atlas-card-badge {
-  color: #c8a84b;
+  color: var(--amber);
   font-size: 13px;
   line-height: 1;
 }
+.app.night .atlas-watched-star { color: var(--paper-dim); }
+.app.night .atlas-card-badge   { color: var(--paper-dim); }
+.app.night .atlas-card.is-watched { background: rgba(232, 122, 114, 0.04); }
 .atlas-list {
   padding: 8px 22px;
 }
