@@ -236,13 +236,11 @@ function useDeviceOrientation(enabled) {
       //   beta = 0    → phone flat, screen up (camera facing sky) → tilt = 90
       //   beta = 180  → phone flat, screen down                  → tilt = -90
       // On iOS, tilting toward sky decreases beta, so tilt = 90 - beta.
-      // Clamp beta to [50, 160] before computing tilt.
-      // Past ~130° the compass heading becomes unreliable (gimbal lock near zenith).
-      const beta = Math.max(50, Math.min(160, e.beta == null ? 90 : e.beta));
-      const newTilt = Math.max(-15, Math.min(70, beta - 90));
-      // Freeze heading above 40° tilt — compass is unreliable near zenith.
-      const newHeading = newTilt > 40 ? (rawRef.current?.heading ?? heading) : heading;
-      rawRef.current = { heading: newHeading, tilt: newTilt };
+      const beta = e.beta == null ? 90 : e.beta;
+      rawRef.current = {
+        heading,
+        tilt: Math.max(-15, Math.min(75, beta - 90)),
+      };
     }
 
     // rAF loop: applies low-pass filter then updates React state (max 60 fps)
@@ -254,17 +252,27 @@ function useDeviceOrientation(enabled) {
       if (rawRef.current) {
         const raw = rawRef.current;
         if (!smoothRef.current) {
-          smoothRef.current = { heading: raw.heading, tilt: raw.tilt };
+          smoothRef.current = { heading: raw.heading, tilt: raw.tilt, flipOffset: 0 };
         } else {
-          // Heading interpolation that handles the 0°/360° wraparound.
-          // Large jumps (> 90°) are likely gimbal-lock artifacts — dampen heavily.
-          let dh = raw.heading - smoothRef.current.heading;
+          // Apply accumulated flip-correction offset then compute delta.
+          let fo = smoothRef.current.flipOffset;
+          let corrected = (raw.heading + fo + 360) % 360;
+          let dh = corrected - smoothRef.current.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
-          const alphaH = Math.abs(dh) > 90 ? 0.02 : ALPHA;
+          // iOS webkitCompassHeading flips exactly 180° near zenith.
+          // If the jump is > 150° after offset, it's a flip — absorb it.
+          if (Math.abs(dh) > 150) {
+            fo = (fo + 180) % 360;
+            corrected = (raw.heading + fo + 360) % 360;
+            dh = corrected - smoothRef.current.heading;
+            if (dh >  180) dh -= 360;
+            if (dh < -180) dh += 360;
+          }
           smoothRef.current = {
-            heading: (smoothRef.current.heading + dh * alphaH + 360) % 360,
-            tilt:    smoothRef.current.tilt + (raw.tilt - smoothRef.current.tilt) * ALPHA,
+            heading:     (smoothRef.current.heading + dh * ALPHA + 360) % 360,
+            tilt:        smoothRef.current.tilt + (raw.tilt - smoothRef.current.tilt) * ALPHA,
+            flipOffset:  fo,
           };
         }
         setOrient({ ...smoothRef.current });
