@@ -277,13 +277,55 @@ function useDeviceOrientation(enabled) {
   return { orient, permState, requestPermission };
 }
 
+/* ------ Camera stream hook ------ */
+function useCameraStream(enabled) {
+  const videoRef  = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) return;
+
+    const start = (constraints) =>
+      navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      });
+
+    // Prefer rear camera; fall back to any camera
+    start({ video: { facingMode: { ideal: "environment" } } })
+      .catch(() => start({ video: true }))
+      .catch(err => console.warn("Caméra inaccessible :", err.message));
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [enabled]);
+
+  return videoRef;
+}
+
 /* ------ Sky View main component ------ */
-function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOrient }) {
+function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOrient, cameraMode = false }) {
   const [heading, setHeading] = useState(180);  // start facing south
   const [tilt, setTilt] = useState(45);          // looking somewhat up
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
+  const videoRef = useCameraStream(cameraMode);
 
   // when compass mode is active and we have orientation data, override
   const effHeading = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
@@ -447,14 +489,17 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
 
   return (
     <div
-      className="sky"
+      className={"sky" + (cameraMode ? " camera-on" : "")}
       ref={containerRef}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <canvas className="sky-canvas" ref={canvasRef}></canvas>
+      {cameraMode && (
+        <video ref={videoRef} className="sky-camera" autoPlay playsInline muted/>
+      )}
+      <canvas className="sky-canvas" ref={canvasRef} style={cameraMode ? { opacity: 0 } : undefined}></canvas>
 
       {/* horizon line */}
       {horizonY !== null && (
