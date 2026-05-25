@@ -351,7 +351,11 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   const lastTapRef = useRef(0);
   const plateCanvasRef = useRef(null);
   const videoRef = useCameraStream(cameraMode);
-  const [zoom, setZoom] = useState(1);
+  const [skyZoom, setSkyZoom] = useState(1);
+  // AR zoom defaults to 2 — compensates for iPhone camera FOV (~65°V) vs overlay FOV (120°V)
+  const [arZoom, setArZoom]   = useState(2);
+  const zoom    = cameraMode ? arZoom    : skyZoom;
+  const setZoom = cameraMode ? setArZoom : setSkyZoom;
   const [plateOffset, setPlateOffset] = useState(0);
   const [plateStatus, setPlateStatus] = useState(null);
 
@@ -403,7 +407,7 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     } else if (pts.length === 1) {
       const now = Date.now();
       if (now - lastTapRef.current < 300) {
-        setZoom(1);
+        setZoom(cameraMode ? 2 : 1);
         lastTapRef.current = 0;
       } else {
         lastTapRef.current = now;
