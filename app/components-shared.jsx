@@ -154,9 +154,9 @@ function TimeScrubber({ minutes, onChange, nowMinutes, location, isLive, onReset
   const ref = useRef(null);
   const dragging = useRef(false);
 
-  // window of ±240 minutes around midnight; minutes can be 18h (1080) to 30h (1800)
-  const min = 18*60;
-  const max = 30*60;
+  // full 24-hour window, 0 to 1440 minutes
+  const min = 0;
+  const max = 24*60;
   const range = max - min;
 
   function setFromX(clientX) {
@@ -188,12 +188,12 @@ function TimeScrubber({ minutes, onChange, nowMinutes, location, isLive, onReset
   const cursorRatio = (minutes - min) / range;
   const nowRatio = nowMinutes != null ? (nowMinutes - min) / range : null;
 
-  // 1-hour ticks
+  // 1-hour ticks across 24h
   const ticks = [];
-  for (let h = 18; h <= 30; h++) {
+  for (let h = 0; h <= 24; h++) {
     const ratio = (h*60 - min) / range;
     const lbl = pad(h % 24) + "h";
-    ticks.push({ ratio, lbl, major: h % 2 === 0 });
+    ticks.push({ ratio, lbl, major: h % 3 === 0 });
   }
 
   // dateLabel — real today/tomorrow based on actual date

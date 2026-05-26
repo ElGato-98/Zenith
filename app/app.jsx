@@ -206,8 +206,7 @@ function App() {
     setCameraMode(true);
   }
 
-  // Time: we anchor on the local "tonight" range — today 18:00 to tomorrow 06:00.
-  // Minutes from midnight 0-1800; scrubber slides 1080 (18h00) → 1800 (30h00 = 06h00 next day).
+  // Time: full 24-hour range, 0–1440 minutes.
   // `now` ticks every 30s so all live data stays current.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -216,19 +215,13 @@ function App() {
   }, []);
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  // start at "now" if it's within the tonight window, else at 22:00
-  const [minutes, setMinutes] = useState(() => {
-    const m = now.getHours() * 60 + now.getMinutes();
-    if (m >= 18*60) return m;
-    if (m < 6*60)   return m + 24*60;
-    return 22*60;
-  });
+  const [minutes, setMinutes] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
   // is the user currently "live" (matching now) or has scrubbed elsewhere?
-  const liveNowMin = nowMinutes >= 18*60 ? nowMinutes : (nowMinutes < 6*60 ? nowMinutes + 24*60 : null);
+  const liveNowMin = nowMinutes;
   const [followLive, setFollowLive] = useState(true);
   // when followLive is true, keep minutes synced to now
   useEffect(() => {
-    if (followLive && liveNowMin != null) setMinutes(liveNowMin);
+    if (followLive) setMinutes(liveNowMin);
   }, [followLive, liveNowMin]);
 
   function handleScrubChange(v) {
@@ -236,11 +229,11 @@ function App() {
     setMinutes(v);
   }
   function resetToNow() {
-    if (liveNowMin != null) { setFollowLive(true); setMinutes(liveNowMin); }
+    setFollowLive(true);
+    setMinutes(liveNowMin);
   }
 
-  // "EN DIRECT" only when we're following AND we're actually inside the tonight window
-  const showLive = followLive && liveNowMin != null;
+  const showLive = followLive;
 
   // compose real Date from now (date part) + minutes (time of "tonight")
   const currentDate = useMemo(() => {
