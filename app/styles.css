@@ -92,6 +92,11 @@ body {
 .app.night { --paper: #e07a72; --paper-dim: rgba(224, 122, 114, 0.55); --paper-fade: rgba(224, 122, 114, 0.22); --paper-trace: rgba(224, 122, 114, 0.10); --paper-faint: rgba(224, 122, 114, 0.04); }
 .app.night .device-status { color: var(--paper); }
 
+/* on real iPhone the iOS status bar is already there — hide our mock */
+@media (max-width: 430px) {
+  .device-status { display: none; }
+}
+
 /* iOS-style status bar */
 .device-status {
   position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 50;
@@ -207,8 +212,8 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   padding: 7px 14px; border-radius: 20px; backdrop-filter: blur(8px);
   transition: color 0.2s, border-color 0.2s;
 }
-.plate-btn.is-ok    { color: rgba(110,220,140,0.9); border-color: rgba(110,220,140,0.35); }
-.plate-btn.is-weak  { color: rgba(220,160,70,0.9);  border-color: rgba(220,160,70,0.35);  }
+.plate-btn.is-ok      { color: rgba(110,220,140,0.9); border-color: rgba(110,220,140,0.35); }
+.plate-btn.is-weak    { color: rgba(220,160,70,0.9);  border-color: rgba(220,160,70,0.35);  }
 .plate-btn.is-solving { opacity: 0.55; }
 
 /* compass strip */
@@ -252,6 +257,61 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, 0);
   width: 1px; height: 100%; background: var(--paper);
   margin-top: -4px;
+}
+
+/* ========== music player panel ========== */
+.music-panel {
+  position: absolute; right: 16px; z-index: 24;
+  width: 200px;
+  background: rgba(14, 12, 10, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--paper-trace);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.music-panel-title {
+  font-family: var(--serif); font-size: 15px; line-height: 1.2;
+  color: var(--paper);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.music-panel-sub {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--paper-fade);
+  margin-top: 2px;
+}
+.music-panel-controls {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+}
+.music-ctrl {
+  background: none; border: none; color: var(--paper-dim);
+  cursor: pointer; padding: 4px; line-height: 1;
+  font-size: 14px;
+  transition: color 0.15s;
+}
+.music-ctrl:hover { color: var(--paper); }
+.music-ctrl.is-play {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--paper-trace);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+.music-panel-vol {
+  display: flex; align-items: center; gap: 8px;
+}
+.music-panel-vol input[type=range] {
+  flex: 1; height: 2px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--paper-trace); border-radius: 1px; outline: none;
+}
+.music-panel-vol input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--paper); cursor: pointer;
+}
+.music-empty {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--paper-fade); text-align: center; line-height: 1.5;
 }
 
 /* top-right HUD */
@@ -316,6 +376,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   letter-spacing: 0.16em; text-transform: uppercase;
   z-index: 16; pointer-events: none;
   white-space: nowrap;
+  transition: opacity 0.25s ease;
 }
 .scope-label-line {
   position: absolute; right: 100%; top: 50%;
@@ -1112,15 +1173,31 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 }
 @keyframes slideIn { from { transform: translateY(6px); } to { transform: translateY(0); } }
 
-/* responsive: actual phone viewports = fullscreen */
+/* responsive: actual phone viewports = fullscreen with iOS safe areas */
 @media (max-width: 460px) {
   .stage { padding: 0; }
   .stage-meta { display: none; }
   .device {
-    width: 100vw; height: 100vh;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
     border-radius: 0;
     box-shadow: none;
   }
+  .device-home { display: none; } /* real iOS indicator replaces the mock */
+
+  /* push content below the iOS status bar (Dynamic Island ~59px, notch ~47px) */
+  .compass  { top: env(safe-area-inset-top, 0px); }
+  .hud-top  { top: calc(env(safe-area-inset-top, 0px) + 4px); }
+  .loc-chip { top: calc(env(safe-area-inset-top, 0px) + 62px); }
+
+  /* push content above the iOS home indicator */
+  .nav {
+    height: calc(92px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  }
+  .scrub     { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+  .plate-btn { bottom: calc(92px  + env(safe-area-inset-bottom, 0px)); }
 }
 /* tight desktop viewports: shrink the device to fit */
 @media (min-width: 461px) and (max-height: 900px) {
