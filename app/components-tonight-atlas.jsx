@@ -78,6 +78,71 @@ function ConjunctionGlyph() {
 
 const EventGlyphs = { iss: <IssGlyph/>, meteors: <MeteorGlyph/>, conjunction: <ConjunctionGlyph/> };
 
+/* ---------------- Astronomical weather (Open-Meteo, no API key) ----------- */
+function useAstroWeather(location) {
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!location?.lat || !location?.lon) return;
+    setLoading(true);
+    const { lat, lon } = location;
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&hourly=cloudcover,precipitation_probability,windspeed_10m,visibility,relativehumidity_2m` +
+      `&forecast_days=6&timezone=auto`
+    )
+      .then(r => r.json())
+      .then(json => { setData(parseAstroWeather(json)); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [location?.lat, location?.lon]);
+  return { data, loading };
+}
+
+function parseAstroWeather(json) {
+  const h = json.hourly;
+  const hours = h.time.map((t, i) => ({
+    time:   new Date(t),          // Open-Meteo returns local-tz strings → getHours() is correct
+    cloud:  h.cloudcover[i],
+    precip: h.precipitation_probability[i],
+    wind:   h.windspeed_10m[i],
+    vis:    h.visibility[i],
+    hum:    h.relativehumidity_2m[i],
+  }));
+  const now = new Date();
+  // Closest hour to now = current conditions
+  const current = hours.reduce((best, x) =>
+    Math.abs(x.time - now) < Math.abs(best.time - now) ? x : best, hours[0]);
+  // 5-night forecast: 21h tonight → 05h next morning for each upcoming day
+  const nights = [];
+  for (let d = 0; d < 5; d++) {
+    const base = new Date(now); base.setDate(base.getDate() + d); base.setHours(0,0,0,0);
+    const next = new Date(base); next.setDate(next.getDate() + 1);
+    const baseStr = base.toISOString().slice(0,10), nextStr = next.toISOString().slice(0,10);
+    const ns = hours.filter(x => {
+      const s = x.time.toISOString().slice(0,10), hr = x.time.getHours();
+      return (s === baseStr && hr >= 21) || (s === nextStr && hr <= 5);
+    });
+    if (ns.length === 0) continue;
+    nights.push({
+      date:      base,
+      avgCloud:  ns.reduce((s,x) => s + x.cloud,  0) / ns.length,
+      maxPrecip: Math.max(...ns.map(x => x.precip)),
+      avgWind:   ns.reduce((s,x) => s + x.wind,   0) / ns.length,
+    });
+  }
+  return { current, nights };
+}
+
+function skyScore(cloud, wind, precip) {
+  if (precip > 40 || cloud > 80) return { label: "Couvert", color: "var(--red)",   symbol: "●" };
+  if (cloud > 50  || wind > 30)  return { label: "Nuageux", color: "var(--amber)", symbol: "◑" };
+  if (cloud > 25  || wind > 20)  return { label: "Partiel", color: "var(--amber)", symbol: "◐" };
+  return                                { label: "Dégagé",  color: "#6ab87a",      symbol: "●" };
+}
+const seeingLabel    = w  => w < 10 ? "Excellent" : w < 20 ? "Bon"      : w < 30 ? "Moyen"    : "Mauvais";
+const transLabel     = (v,h) => v > 20000 && h < 60 ? "Excellente" : v > 10000 && h < 75 ? "Bonne" : v > 5000 ? "Moyenne" : "Faible";
+const DAY_SHORT      = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+
 /* ---------------- CETTE NUIT screen ---------------- */
 function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
   // Compute real sun/moon times + planet positions for the chosen location/date
@@ -88,6 +153,8 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
     if (!observer || !date) return [];
     try { return getDynamicEvents(observer, date); } catch(_) { return []; }
   }, [observer, date]);
+
+  const { data: wx, loading: wxLoading } = useAstroWeather(location);
 
   const dateStr = date ? frenchDate(date) : "";
   const dateCap = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
@@ -209,31 +276,78 @@ function TonightScreen({ onSelect, location, onOpenLocation, observer, date }) {
           </div>
         </section>
 
-        {/* Weather / conditions — static placeholder, would need weather API */}
+        {/* Conditions météo astronomiques */}
         <section className="tonight-section" style={{ borderBottom: 0 }}>
           <div className="tonight-section-h">
             <h3>Conditions</h3>
             <span className="count numeral">Bortle {location.bortle}</span>
           </div>
-          <div style={{
-            fontFamily: "var(--serif)", fontStyle: "italic",
-            color: "var(--paper-dim)", fontSize: "14px", lineHeight: "1.5",
-            padding: "8px 0"
-          }}>
-            Pollution lumineuse · classe {location.bortle} sur l'échelle de Bortle.
-            {location.bortle <= 3 ? " Ciel exceptionnel — Voie lactée détaillée." :
-             location.bortle <= 5 ? " Ciel correct — la plupart des constellations sont visibles." :
-             location.bortle <= 7 ? " Ciel urbain — seules les étoiles brillantes apparaissent." :
-             " Ciel très pollué — seules les planètes et la Lune ressortent."}
+
+          {/* Bortle blurb */}
+          <div style={{ fontFamily:"var(--serif)", fontStyle:"italic", color:"var(--paper-dim)", fontSize:"13px", lineHeight:"1.5", paddingBottom:"14px" }}>
+            Pollution lumineuse · classe {location.bortle}.
+            {location.bortle <= 3 ? " Voie lactée détaillée visible." :
+             location.bortle <= 5 ? " La plupart des constellations visibles." :
+             location.bortle <= 7 ? " Seules les étoiles brillantes apparaissent." :
+             " Seules les planètes et la Lune ressortent."}
           </div>
-          <div style={{
-            marginTop: "12px",
-            fontFamily: "var(--mono)", fontSize: "10px",
-            color: "var(--paper-fade)",
-            letterSpacing: "0.14em", textTransform: "uppercase"
-          }}>
-            Données météo (couverture, transparence, seeing) — branchement API à venir
-          </div>
+
+          {/* Live weather block */}
+          {wxLoading && (
+            <div style={{ fontFamily:"var(--mono)", fontSize:"9px", color:"var(--paper-fade)", letterSpacing:"0.18em", textTransform:"uppercase", padding:"8px 0" }}>
+              Chargement météo…
+            </div>
+          )}
+          {wx && (() => {
+            const c = wx.current;
+            const q = skyScore(c.cloud, c.wind, c.precip);
+            return (
+              <>
+                {/* Quality badge */}
+                <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px" }}>
+                  <span style={{ fontSize:"22px", color: q.color, lineHeight:1 }}>{q.symbol}</span>
+                  <span style={{ fontFamily:"var(--serif)", fontSize:"20px", color: q.color }}>{q.label}</span>
+                  <span style={{ fontFamily:"var(--mono)", fontSize:"9px", color:"var(--paper-fade)", letterSpacing:"0.16em", textTransform:"uppercase", marginLeft:"auto" }}>maintenant</span>
+                </div>
+
+                {/* Stats grid */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"8px", marginBottom:"18px" }}>
+                  {[
+                    { lbl:"Nuages",   val: Math.round(c.cloud) + "%" },
+                    { lbl:"Seeing",   val: seeingLabel(c.wind) },
+                    { lbl:"Transp.",  val: transLabel(c.vis, c.hum) },
+                    { lbl:"Précip.",  val: Math.round(c.precip) + "%" },
+                  ].map(({ lbl, val }) => (
+                    <div key={lbl} style={{ background:"rgba(232,228,216,0.04)", borderRadius:"6px", padding:"8px 6px", textAlign:"center" }}>
+                      <div style={{ fontFamily:"var(--mono)", fontSize:"8px", color:"var(--paper-fade)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:"4px" }}>{lbl}</div>
+                      <div style={{ fontFamily:"var(--mono)", fontSize:"11px", color:"var(--paper)" }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 5-night forecast strip */}
+                <div style={{ fontFamily:"var(--mono)", fontSize:"8px", color:"var(--paper-fade)", letterSpacing:"0.16em", textTransform:"uppercase", marginBottom:"8px" }}>Prévision · 5 nuits</div>
+                <div style={{ display:"flex", gap:"6px" }}>
+                  {wx.nights.map((n, i) => {
+                    const nq = skyScore(n.avgCloud, n.avgWind, n.maxPrecip);
+                    return (
+                      <div key={i} style={{ flex:1, background:"rgba(232,228,216,0.04)", borderRadius:"6px", padding:"8px 4px", textAlign:"center" }}>
+                        <div style={{ fontFamily:"var(--mono)", fontSize:"8px", color:"var(--paper-fade)", marginBottom:"5px" }}>{DAY_SHORT[n.date.getDay()]}</div>
+                        <div style={{ fontSize:"14px", color: nq.color, lineHeight:1, marginBottom:"4px" }}>{nq.symbol}</div>
+                        <div style={{ fontFamily:"var(--mono)", fontSize:"7px", color: nq.color, letterSpacing:"0.06em" }}>{nq.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+
+          {!wx && !wxLoading && (
+            <div style={{ fontFamily:"var(--mono)", fontSize:"9px", color:"var(--paper-fade)", letterSpacing:"0.14em", textTransform:"uppercase" }}>
+              Données météo indisponibles
+            </div>
+          )}
         </section>
       </div>
     </div>
