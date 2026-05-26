@@ -107,7 +107,9 @@ body {
 .app.day .sky { background: var(--ink); }
 .app.day .device-home { background: rgba(26, 21, 16, 0.35); }
 .app.day .nav { background: linear-gradient(to top, var(--ink) 55%, rgba(242, 237, 227, 0)); }
-.app.day .hud-btn.is-active { color: var(--amber); border-color: var(--amber); }
+.app.day .hud-btn { background: rgba(242, 237, 227, 0.75); border-color: rgba(26, 21, 16, 0.15); color: var(--amber); }
+.app.day .hud-btn:hover { border-color: var(--amber); }
+.app.day .hud-btn.is-active { background: rgba(224, 120, 32, 0.15); border-color: var(--amber); color: var(--amber); }
 
 
 /* iOS-style status bar */

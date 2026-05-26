@@ -3,20 +3,38 @@
    Manages screen, night mode, selected object, time.
    ============================================================ */
 
-function NightToggle({ mode, onToggle }) {
-  // mode: 0=dark, 1=rouge nuit, 2=jour
-  const icons = [
-    /* 0 dark  */ <svg key="d" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 9 A 5 5 0 1 1 5 3 A 4 4 0 0 0 11 9 Z" stroke="currentColor" strokeWidth="0.9" fill="none" opacity="0.4"/></svg>,
-    /* 1 night */ <svg key="n" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 9 A 5 5 0 1 1 5 3 A 4 4 0 0 0 11 9 Z" stroke="currentColor" strokeWidth="0.9" fill="none"/></svg>,
-    /* 2 day   */ <svg key="s" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="0.9"/><line x1="7" y1="1" x2="7" y2="2.5" stroke="currentColor" strokeWidth="0.9"/><line x1="7" y1="11.5" x2="7" y2="13" stroke="currentColor" strokeWidth="0.9"/><line x1="1" y1="7" x2="2.5" y2="7" stroke="currentColor" strokeWidth="0.9"/><line x1="11.5" y1="7" x2="13" y2="7" stroke="currentColor" strokeWidth="0.9"/><line x1="2.8" y1="2.8" x2="3.9" y2="3.9" stroke="currentColor" strokeWidth="0.9"/><line x1="10.1" y1="10.1" x2="11.2" y2="11.2" stroke="currentColor" strokeWidth="0.9"/><line x1="11.2" y1="2.8" x2="10.1" y2="3.9" stroke="currentColor" strokeWidth="0.9"/><line x1="3.9" y1="10.1" x2="2.8" y2="11.2" stroke="currentColor" strokeWidth="0.9"/></svg>,
-  ];
+function NightToggle({ on, onToggle }) {
   return (
     <button
-      className={"hud-btn " + (mode > 0 ? "is-active" : "")}
+      className={"hud-btn " + (on ? "is-active" : "")}
       onClick={onToggle}
-      title={mode === 0 ? "Mode sombre" : mode === 1 ? "Mode nuit rouge" : "Mode jour"}
+      title={on ? "Mode nuit rouge actif" : "Mode nuit rouge"}
     >
-      {icons[mode]}
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M11 9 A 5 5 0 1 1 5 3 A 4 4 0 0 0 11 9 Z" stroke="currentColor" strokeWidth="0.9" fill="none"/>
+      </svg>
+    </button>
+  );
+}
+
+function DayToggle({ on, onToggle }) {
+  return (
+    <button
+      className={"hud-btn " + (on ? "is-active" : "")}
+      onClick={onToggle}
+      title={on ? "Mode jour actif" : "Mode jour"}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="7" y1="1"    x2="7"    y2="2.5"  stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="7" y1="11.5" x2="7"    y2="13"   stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="1" y1="7"    x2="2.5"  y2="7"    stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="11.5" y1="7" x2="13"   y2="7"    stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="2.8" y1="2.8"   x2="3.9"  y2="3.9"  stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="10.1" y1="10.1" x2="11.2" y2="11.2" stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="11.2" y1="2.8"  x2="10.1" y2="3.9"  stroke="currentColor" strokeWidth="0.9"/>
+        <line x1="3.9" y1="10.1"  x2="2.8"  y2="11.2" stroke="currentColor" strokeWidth="0.9"/>
+      </svg>
     </button>
   );
 }
@@ -281,7 +299,8 @@ function App() {
           <div className="hud-top">
             <CompassButton on={compassMode} active={compassMode && deviceOrient != null} onToggle={toggleCompass}/>
             <CameraButton on={cameraMode} onToggle={toggleCamera}/>
-            <NightToggle mode={themeMode} onToggle={() => setThemeMode(m => (m + 1) % 3)}/>
+            <NightToggle on={nightMode} onToggle={() => setThemeMode(m => m === 1 ? 0 : 1)}/>
+            <DayToggle   on={dayMode}   onToggle={() => setThemeMode(m => m === 2 ? 0 : 2)}/>
             <MusicButton on={musicOpen || audio.playing} onToggle={() => setMusicOpen(o => !o)}/>
             <SearchButton onClick={gotoAtlas}/>
           </div>
