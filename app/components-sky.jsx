@@ -371,13 +371,19 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   const zoom    = cameraMode ? arZoom    : skyZoom;
   const setZoom = cameraMode ? setArZoom : setSkyZoom;
   const plateCanvasRef = useRef(null);
-  const [plateOffset, setPlateOffset] = useState(0);
-  const [plateStatus, setPlateStatus] = useState(null);
+  const [plateOffset,     setPlateOffset]     = useState(0);
+  const [plateTiltOffset, setPlateTiltOffset] = useState(0);
+  const [plateStatus,     setPlateStatus]     = useState(null);
+  const [calibLabel,      setCalibLabel]      = useState(null);
 
   // when compass mode is active and we have orientation data, override
   const rawHeading = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
+  const rawTilt    = (compassMode && deviceOrient) ? deviceOrient.tilt    : tilt;
+  // In AR mode apply both offsets: heading corrects magnetic bias, tilt corrects sensor bias
   const effHeading = cameraMode ? (rawHeading + plateOffset + 360) % 360 : rawHeading;
-  const effTilt    = (compassMode && deviceOrient) ? deviceOrient.tilt    : tilt;
+  const effTilt    = cameraMode
+    ? Math.max(-15, Math.min(90, rawTilt + plateTiltOffset))
+    : rawTilt;
 
   const paperRgb = nightMode ? "224, 122, 114" : "232, 228, 216";
 
@@ -508,6 +514,18 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   }, [sunLive, effHeading, effTilt, size, zoom]);
 
   // constellation lines visible
+  // Best target for one-tap calibration (works day and night)
+  const calibTarget = useMemo(() => {
+    if (moonLive  && moonLive.alt  > 5) return { name: "Lune",   az: moonLive.az,  alt: moonLive.alt };
+    if (sunLive   && sunLive.alt   > 5) return { name: "Soleil", az: sunLive.az,   alt: sunLive.alt  };
+    const priority = ["venus", "jupiter", "saturn", "mars", "mercury"];
+    for (const id of priority) {
+      const pl = planetsLive.find(p => p.id === id && p.alt > 5);
+      if (pl) return { name: pl.name, az: pl.az, alt: pl.alt };
+    }
+    return null;
+  }, [moonLive, sunLive, planetsLive]);
+
   const constellationLines = useMemo(() => {
     const byId = Object.fromEntries(namedProjected.map(s => [s.id, s]));
     const lines = [];
@@ -582,8 +600,22 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       .filter(l => l.x > 20 && l.x < size.w - 20 && l.y > 80 && l.y < size.h - 180);
   }, [namedProjected, size]);
 
-  function runPlateSolve() {
-    if (!videoRef.current || !plateCanvasRef.current) return;
+  function runCalibrate() {
+    // Primary: celestial calibration — works day and night, no camera analysis needed.
+    // User points phone so the target (Moon / Sun / planet) is at the reticle centre,
+    // then taps CALIBRER. We compute the heading AND tilt offsets in one shot.
+    if (calibTarget && compassMode && deviceOrient) {
+      const newHOffset = (calibTarget.az - rawHeading + 360) % 360;
+      const newTOffset = calibTarget.alt - rawTilt;
+      setPlateOffset(newHOffset);
+      setPlateTiltOffset(newTOffset);
+      setCalibLabel(calibTarget.name);
+      setPlateStatus("ok");
+      setTimeout(() => setPlateStatus(null), 3000);
+      return;
+    }
+    // Fallback: star-pattern plate solve (clear night only, ≥2 bright spots in image)
+    if (!videoRef.current || !plateCanvasRef.current) { setPlateStatus("weak"); setTimeout(() => setPlateStatus(null), 3000); return; }
     setPlateStatus("solving");
     const video = videoRef.current;
     const W = 320, H = 240;
@@ -620,11 +652,11 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     const allCandidates = [
       ...starsWithAzAlt.filter(s => s.mag < 3 && s.alt > -5),
       ...planetsLive.filter(p => p.mag < 3),
-      ...(moonLive  ? [moonLive]  : []),
-      ...(sunLive   ? [sunLive]   : []),
+      ...(moonLive ? [moonLive] : []),
+      ...(sunLive  ? [sunLive]  : []),
     ];
     let bestOffset = 0, bestScore = Infinity;
-    const baseH = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
+    const baseH = rawHeading;
     for (let dh = -45; dh <= 45; dh++) {
       const testH = (baseH + dh + 360) % 360;
       let score = 0;
@@ -665,10 +697,14 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
           <canvas ref={plateCanvasRef} style={{ display: "none" }}/>
           <button
             className={"plate-btn" + (plateStatus === "ok" ? " is-ok" : plateStatus === "weak" ? " is-weak" : plateStatus === "solving" ? " is-solving" : "")}
-            onClick={runPlateSolve}
+            onClick={runCalibrate}
             disabled={plateStatus === "solving"}
           >
-            {plateStatus === "solving" ? "Calibration…" : plateStatus === "ok" ? "Calibré ✓" : plateStatus === "weak" ? "Signal faible" : "Calibrer"}
+            {plateStatus === "solving" ? "Calibration…"
+              : plateStatus === "ok"   ? `Calibré · ${calibLabel} ✓`
+              : plateStatus === "weak" ? "Signal faible"
+              : calibTarget            ? `→ ${calibTarget.name}`
+              : "Calibrer"}
           </button>
         </>
       )}
