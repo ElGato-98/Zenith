@@ -212,10 +212,9 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
   padding: 7px 14px; border-radius: 20px; backdrop-filter: blur(8px);
   transition: color 0.2s, border-color 0.2s;
 }
-.plate-btn.is-ok         { color: rgba(110,220,140,0.9); border-color: rgba(110,220,140,0.35); }
-.plate-btn.is-weak       { color: rgba(220,160,70,0.9);  border-color: rgba(220,160,70,0.35);  }
-.plate-btn.needs-calib   { color: var(--paper); border-color: rgba(232,228,216,0.45); animation: pulse-border 2s ease-in-out infinite; }
-@keyframes pulse-border  { 0%,100% { border-color: rgba(232,228,216,0.45); } 50% { border-color: rgba(232,228,216,0.85); } }
+.plate-btn.is-ok      { color: rgba(110,220,140,0.9); border-color: rgba(110,220,140,0.35); }
+.plate-btn.is-weak    { color: rgba(220,160,70,0.9);  border-color: rgba(220,160,70,0.35);  }
+.plate-btn.is-solving { opacity: 0.55; }
 
 /* compass strip */
 .compass {
