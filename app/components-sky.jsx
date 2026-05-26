@@ -249,8 +249,9 @@ function useDeviceOrientation(enabled) {
       const tilt = Math.max(-15, Math.min(80,
         Math.asin(Math.max(-1, Math.min(1, cz))) * 180/Math.PI));
 
-      // Heading: use the hardware compass directly — no matrix drift.
-      const compassHeading = e.webkitCompassHeading ?? (e.alpha ?? 0);
+      // Gyro yaw only — no magnetic compass, no environmental bias.
+      // plateOffset in SkyView anchors this to a known celestial azimuth.
+      const compassHeading = e.alpha ?? 0;
 
       rawRef.current = { compassHeading, tilt };
     }
@@ -268,10 +269,6 @@ function useDeviceOrientation(enabled) {
           let dh = raw.compassHeading - s.heading;
           if (dh >  180) dh -= 360;
           if (dh < -180) dh += 360;
-          // iOS flips webkitCompassHeading ~180° when tilt crosses ~45°.
-          // A genuine 180° turn while sky-gazing is physically implausible,
-          // so freeze heading on any jump > 150°.
-          if (Math.abs(dh) > 150) dh = 0;
           smoothRef.current = {
             heading: (s.heading + dh * SMOOTH + 360) % 360,
             tilt:     s.tilt + (raw.tilt - s.tilt) * SMOOTH,
@@ -364,7 +361,6 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   const pointersRef = useRef({});
   const pinchRef = useRef(null);
   const lastTapRef = useRef(0);
-  const plateCanvasRef = useRef(null);
   const videoRef = useCameraStream(cameraMode);
   const [skyZoom, setSkyZoom] = useState(1);
   // AR zoom defaults to 2 — compensates for iPhone camera FOV (~65°V) vs overlay FOV (120°V)
@@ -373,10 +369,16 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
   const setZoom = cameraMode ? setArZoom : setSkyZoom;
   const [plateOffset, setPlateOffset] = useState(0);
   const [plateStatus, setPlateStatus] = useState(null);
+  const [calibLabel,  setCalibLabel]  = useState(null);
+  const [isCalibrated, setIsCalibrated] = useState(false);
 
   // when compass mode is active and we have orientation data, override
   const rawHeading = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
-  const effHeading = cameraMode ? (rawHeading + plateOffset + 360) % 360 : rawHeading;
+  // plateOffset anchors the gyro's arbitrary alpha reference to a known celestial azimuth.
+  // Apply whenever compass mode is live; leave drag-mode heading unmodified.
+  const effHeading = (compassMode && deviceOrient)
+    ? (rawHeading + plateOffset + 360) % 360
+    : rawHeading;
   const effTilt    = (compassMode && deviceOrient) ? deviceOrient.tilt    : tilt;
 
   const paperRgb = nightMode ? "224, 122, 114" : "232, 228, 216";
@@ -507,6 +509,20 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     return p ? { ...sunLive, ...p, id: "sun", name: "Soleil" } : null;
   }, [sunLive, effHeading, effTilt, size, zoom]);
 
+  // Best object for gyro calibration: Moon > bright planets > Sun > bright star
+  const calibTarget = useMemo(() => {
+    if (moonLive && moonLive.alt > 5) return { name: "Lune", az: moonLive.az };
+    const priority = ["venus", "jupiter", "saturn", "mars", "mercury"];
+    for (const id of priority) {
+      const pl = planetsLive.find(p => p.id === id && p.alt > 5);
+      if (pl) return { name: pl.name, az: pl.az };
+    }
+    if (sunLive && sunLive.alt > 5) return { name: "Soleil", az: sunLive.az };
+    const bright = starsWithAzAlt.filter(s => s.alt > 5 && s.mag < 1.5).sort((a, b) => a.mag - b.mag)[0];
+    if (bright) return { name: bright.name, az: bright.az };
+    return null;
+  }, [moonLive, planetsLive, sunLive, starsWithAzAlt]);
+
   // constellation lines visible
   const constellationLines = useMemo(() => {
     const byId = Object.fromEntries(namedProjected.map(s => [s.id, s]));
@@ -582,75 +598,20 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       .filter(l => l.x > 20 && l.x < size.w - 20 && l.y > 80 && l.y < size.h - 180);
   }, [namedProjected, size]);
 
-  function runPlateSolve() {
-    if (!videoRef.current || !plateCanvasRef.current) return;
-    setPlateStatus("solving");
-    const video = videoRef.current;
-    const W = 320, H = 240;
-    const canvas = plateCanvasRef.current;
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, W, H);
-    let imageData;
-    try { imageData = ctx.getImageData(0, 0, W, H); }
-    catch(_) { setPlateStatus("weak"); setTimeout(() => setPlateStatus(null), 3000); return; }
-    // Luminance map
-    const { data } = imageData;
-    const lum = new Float32Array(W * H);
-    for (let i = 0; i < W * H; i++)
-      lum[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
-    // Local bright-spot maxima
-    const spots = [];
-    for (let y = 4; y < H-4; y++) {
-      for (let x = 4; x < W-4; x++) {
-        const v = lum[y*W+x];
-        if (v < 160) continue;
-        let isMax = true;
-        for (let dy=-3; dy<=3 && isMax; dy++)
-          for (let dx=-3; dx<=3 && isMax; dx++)
-            if (lum[(y+dy)*W+(x+dx)] > v) isMax = false;
-        if (!isMax) continue;
-        let near = false;
-        for (const s of spots) if (Math.hypot(s.x-x, s.y-y) < 14) { near = true; break; }
-        if (!near) spots.push({ x, y, v });
-      }
-    }
-    spots.sort((a, b) => b.v - a.v);
-    const detected = spots.slice(0, 8);
-    if (detected.length < 2) { setPlateStatus("weak"); setTimeout(() => setPlateStatus(null), 3000); return; }
-    const normSpots = detected.map(s => ({ nx: (s.x/W - 0.5)*2, ny: (s.y/H - 0.5)*2 }));
-    // Candidates from catalog
-    const allCandidates = [
-      ...starsWithAzAlt.filter(s => s.mag < 3 && s.alt > -5),
-      ...planetsLive.filter(p => p.mag < 3),
-      ...(moonLive  ? [moonLive]  : []),
-      ...(sunLive   ? [sunLive]   : []),
-    ];
-    // Sweep heading offset -45…+45° in 1° steps
-    let bestOffset = 0, bestScore = Infinity;
-    const baseH = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
-    for (let dh = -45; dh <= 45; dh++) {
-      const testH = (baseH + dh + 360) % 360;
-      let score = 0;
-      for (const spot of normSpots) {
-        let minD = 0.25;
-        for (const star of allCandidates) {
-          const p = project(star, testH, effTilt, size.w, size.h, zoom);
-          if (!p) continue;
-          const d = Math.hypot((p.x/size.w - 0.5)*2 - spot.nx, (p.y/size.h - 0.5)*2 - spot.ny);
-          if (d < minD) minD = d;
-        }
-        score += minD;
-      }
-      if (score < bestScore) { bestScore = score; bestOffset = dh; }
-    }
-    const confidence = 1 - bestScore / (normSpots.length * 0.25);
-    if (confidence > 0.25) {
-      setPlateOffset(prev => prev + bestOffset);
-      setPlateStatus("ok");
-    } else {
+  function runCelestialCalibrate() {
+    if (!calibTarget || !compassMode || !deviceOrient) {
       setPlateStatus("weak");
+      setTimeout(() => setPlateStatus(null), 3000);
+      return;
     }
+    // rawHeading = smoothed gyro alpha (arbitrary reference).
+    // Setting plateOffset = object_az - rawHeading makes effHeading == object_az
+    // the instant after calibration: phone is pointed at that object.
+    const newOffset = (calibTarget.az - rawHeading + 360) % 360;
+    setPlateOffset(newOffset);
+    setCalibLabel(calibTarget.name);
+    setIsCalibrated(true);
+    setPlateStatus("ok");
     setTimeout(() => setPlateStatus(null), 3000);
   }
 
@@ -664,17 +625,22 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
       onPointerCancel={onPointerUp}
     >
       {cameraMode && (
-        <>
-          <video ref={videoRef} className="sky-camera" autoPlay playsInline muted/>
-          <canvas ref={plateCanvasRef} style={{ display: "none" }}/>
-          <button
-            className={"plate-btn" + (plateStatus === "ok" ? " is-ok" : plateStatus === "weak" ? " is-weak" : plateStatus === "solving" ? " is-solving" : "")}
-            onClick={runPlateSolve}
-            disabled={plateStatus === "solving"}
-          >
-            {plateStatus === "solving" ? "Calibration…" : plateStatus === "ok" ? "Calibré ✓" : plateStatus === "weak" ? "Signal faible" : "Calibrer"}
-          </button>
-        </>
+        <video ref={videoRef} className="sky-camera" autoPlay playsInline muted/>
+      )}
+      {compassMode && (
+        <button
+          className={"plate-btn" + (plateStatus === "ok" ? " is-ok" : plateStatus === "weak" ? " is-weak" : (!isCalibrated ? " needs-calib" : ""))}
+          onClick={runCelestialCalibrate}
+          disabled={plateStatus !== null}
+        >
+          {plateStatus === "ok"
+            ? `Calibré · ${calibLabel} ✓`
+            : plateStatus === "weak"
+            ? "Aucune cible visible"
+            : calibTarget
+            ? `→ ${calibTarget.name}`
+            : "Calibrer"}
+        </button>
       )}
       <canvas className="sky-canvas" ref={canvasRef} style={cameraMode ? { opacity: 0 } : undefined}></canvas>
 
