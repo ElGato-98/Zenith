@@ -1188,6 +1188,11 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 }
 @keyframes slideIn { from { transform: translateY(6px); } to { transform: translateY(0); } }
 
+/* ---- Solar System screen ---- */
+.solar-screen {
+  overflow: hidden;
+}
+
 /* responsive: actual phone viewports = fullscreen with iOS safe areas */
 @media (max-width: 460px) {
   .stage { padding: 0; }

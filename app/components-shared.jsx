@@ -54,14 +54,23 @@ const NavGlyphs = {
       <ellipse cx="11" cy="11" rx="4" ry="10" stroke="currentColor" strokeWidth="0.9"/>
       <circle cx="11" cy="11" r="1.5" fill="currentColor"/>
     </svg>
-  )
+  ),
+  systeme: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="9" r="2" fill="currentColor"/>
+      <circle cx="9" cy="9" r="5" stroke="currentColor" strokeWidth="0.8" fill="none"/>
+      <circle cx="9" cy="9" r="8" stroke="currentColor" strokeWidth="0.6" fill="none" strokeDasharray="2 2"/>
+      <circle cx="14" cy="9" r="1" fill="currentColor" opacity="0.7"/>
+    </svg>
+  ),
 };
 
 function BottomNav({ screen, onChange }) {
   const items = [
-    { id: "ciel",  label: "Ciel" },
-    { id: "nuit",  label: "Cette nuit" },
-    { id: "atlas", label: "Atlas" }
+    { id: "ciel",    label: "Ciel" },
+    { id: "nuit",    label: "Cette nuit" },
+    { id: "atlas",   label: "Atlas" },
+    { id: "systeme", label: "Système" },
   ];
   return (
     <nav className="nav">

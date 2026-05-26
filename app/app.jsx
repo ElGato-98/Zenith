@@ -330,6 +330,16 @@ function App() {
         <AtlasScreen onSelect={selectObject} favorites={favorites} onToggleFav={toggleFavorite}/>
       )}
 
+      {screen === "systeme" && (
+        <SolarSystemScreen
+          observer={observer}
+          date={currentDate}
+          nightMode={nightMode}
+          dayMode={dayMode}
+          onSelect={selectObject}
+        />
+      )}
+
       {selected && (
         <ObjectDetail
           obj={selected}
