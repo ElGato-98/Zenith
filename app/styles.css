@@ -331,7 +331,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 
 /* top-right HUD */
 .hud-top {
-  position: absolute; top: 54px; right: 16px;
+  position: absolute; top: 124px; right: 16px;
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
   z-index: 25;
 }
@@ -1204,7 +1204,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 
   /* push content below the iOS status bar (Dynamic Island ~59px, notch ~47px) */
   .compass  { top: env(safe-area-inset-top, 0px); }
-  .hud-top  { top: calc(env(safe-area-inset-top, 0px) + 4px); }
+  .hud-top  { top: calc(env(safe-area-inset-top, 0px) + 62px); }
   .loc-chip { top: calc(env(safe-area-inset-top, 0px) + 62px); }
 
   /* push content above the iOS home indicator */
