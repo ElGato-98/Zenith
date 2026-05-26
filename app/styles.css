@@ -92,10 +92,6 @@ body {
 .app.night { --paper: #e07a72; --paper-dim: rgba(224, 122, 114, 0.55); --paper-fade: rgba(224, 122, 114, 0.22); --paper-trace: rgba(224, 122, 114, 0.10); --paper-faint: rgba(224, 122, 114, 0.04); }
 .app.night .device-status { color: var(--paper); }
 
-/* on real iPhone the iOS status bar is already there — hide our mock */
-@media (max-width: 430px) {
-  .device-status { display: none; }
-}
 
 /* iOS-style status bar */
 .device-status {
@@ -1177,6 +1173,7 @@ hr.hairline { border: 0; height: 1px; background: var(--paper-trace); }
 @media (max-width: 460px) {
   .stage { padding: 0; }
   .stage-meta { display: none; }
+  .device-status { display: none; } /* iOS draws its own status bar */
   .device {
     width: 100vw;
     height: 100vh;
