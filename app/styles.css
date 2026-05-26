@@ -92,6 +92,23 @@ body {
 .app.night { --paper: #e07a72; --paper-dim: rgba(224, 122, 114, 0.55); --paper-fade: rgba(224, 122, 114, 0.22); --paper-trace: rgba(224, 122, 114, 0.10); --paper-faint: rgba(224, 122, 114, 0.04); }
 .app.night .device-status { color: var(--paper); }
 
+/* day mode — off-white background, near-black text, orange accents */
+.app.day {
+  --ink:         #f2ede3;
+  --ink-1:       #e8e2d6;
+  --ink-2:       #ddd7ca;
+  --paper:       #1a1510;
+  --paper-dim:   rgba(26, 21, 16, 0.60);
+  --paper-fade:  rgba(26, 21, 16, 0.30);
+  --paper-trace: rgba(26, 21, 16, 0.12);
+  --paper-faint: rgba(26, 21, 16, 0.05);
+  --amber:       #e07820;
+}
+.app.day .sky { background: radial-gradient(ellipse at 50% 100%, #0d1a33 0%, #1a2f5a 35%, #2a4a8a 70%, #3a5fa0 100%); }
+.app.day .device-home { background: rgba(26, 21, 16, 0.35); }
+.app.day .nav { background: linear-gradient(to top, var(--ink) 55%, rgba(242, 237, 227, 0)); }
+.app.day .hud-btn.is-active { color: var(--amber); border-color: var(--amber); }
+
 
 /* iOS-style status bar */
 .device-status {

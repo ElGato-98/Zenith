@@ -246,7 +246,7 @@ function useDeviceOrientation(enabled) {
       // Tilt (altitude above horizon) from the camera's Z component in world frame.
       // cz = -(cos β · cos γ): 0° at beta=90° (upright/horizon), 90° at beta=180° (zenith).
       const cz   = -(Math.cos(b) * Math.cos(g));
-      const tilt = Math.max(-15, Math.min(80,
+      const tilt = Math.max(-15, Math.min(90,
         Math.asin(Math.max(-1, Math.min(1, cz))) * 180/Math.PI));
 
       // Heading: use the hardware compass directly — no matrix drift.
@@ -355,7 +355,7 @@ function useCameraStream(enabled) {
 }
 
 /* ------ Sky View main component ------ */
-function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOrient, cameraMode = false }) {
+function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, compassMode, deviceOrient, cameraMode = false }) {
   const [heading, setHeading] = useState(180);  // start facing south
   const [tilt, setTilt] = useState(45);          // looking somewhat up
   const containerRef = useRef(null);
@@ -385,7 +385,7 @@ function SkyView({ nightMode, onTapObject, observer, date, compassMode, deviceOr
     ? Math.max(-15, Math.min(90, rawTilt + plateTiltOffset))
     : rawTilt;
 
-  const paperRgb = nightMode ? "224, 122, 114" : "232, 228, 216";
+  const paperRgb = nightMode ? "224, 122, 114" : dayMode ? "20, 15, 8" : "232, 228, 216";
 
   // sky size — we measure container
   const [size, setSize] = useState({ w: 390, h: 844 });
