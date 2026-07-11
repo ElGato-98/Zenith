@@ -1,4 +1,4 @@
-const CACHE = 'zenith-v1';
+const CACHE = 'zenith-v4-ar-3d';
 
 const LOCAL_ASSETS = [
   './',
@@ -14,6 +14,7 @@ const LOCAL_ASSETS = [
   './components-sky.jsx',
   './components-detail.jsx',
   './components-tonight-atlas.jsx',
+  './components-solar-system.jsx',
   './app.jsx',
 ];
 
