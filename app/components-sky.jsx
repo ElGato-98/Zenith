@@ -1,6 +1,8 @@
 /* ============================================================
    ZÉNITH — SkyView: the live sky screen.
-   True gnomonic (perspective) projection centred on (heading, tilt).
+   Perspective projection through a full 3-D camera basis
+   (forward/right/up) — AR mode tracks the real camera axis
+   including roll; map mode uses a zero-roll (heading, tilt) basis.
    Drag to pan, pinch to zoom, tap a star to open detail.
    ============================================================ */
 
@@ -57,39 +59,63 @@ const MILKY_WAY_RD = (() => {
   return out;
 })();
 
-function project(star, heading, tilt, width, height, zoom = 1) {
-  const D = Math.PI / 180;
-  const H = heading * D, T = tilt * D;
-  const az = star.az * D, alt = star.alt * D;
+/* ---------- 3-D camera basis helpers ----------
+   World frame: x = East, y = North, z = Up.
+   A camera is described by three orthonormal vectors:
+   f = forward (where the lens points), r = screen-right, u = screen-up. */
 
-  // 3-D unit vectors in East-North-Up frame
-  const Cx = Math.sin(H)*Math.cos(T), Cy = Math.cos(H)*Math.cos(T), Cz = Math.sin(T);
-  const Sx = Math.sin(az)*Math.cos(alt), Sy = Math.cos(az)*Math.cos(alt), Sz = Math.sin(alt);
+const dot3   = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const cross3 = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm3  = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0]/l, v[1]/l, v[2]/l]; };
 
-  const dot_c = Sx*Cx + Sy*Cy + Sz*Cz;   // how far in front of camera
-  if (dot_c < 0.01) return null;           // behind or at edge of hemisphere
-
-  // Screen-plane basis: R = screen-right, U = screen-up (→ screen y decreases)
-  const Rx =  Math.cos(H),              Ry = -Math.sin(H),             Rz = 0;
-  const Ux = -Math.sin(H)*Math.sin(T),  Uy = -Math.cos(H)*Math.sin(T), Uz = Math.cos(T);
-
-  // Focal length from horizontal FOV
-  const f = (width/2) / Math.tan((FOV_H / zoom / 2) * D);
-
-  const x = width/2  + (Sx*Rx + Sy*Ry + Sz*Rz) / dot_c * f;
-  const y = height/2 - (Sx*Ux + Sy*Uy + Sz*Uz) / dot_c * f;
-
-  if (x < -80 || x > width + 80 || y < -80 || y > height + 80) return null;
-
+/* Zero-roll basis from (heading, tilt) — used by map mode, where the
+   sky chart deliberately stays upright regardless of device roll. */
+function basisFromHeadingTilt(heading, tilt) {
+  const D = Math.PI / 180, H = heading * D, T = tilt * D;
   return {
-    x, y,
-    relAz:  Math.atan2(Sx*Rx + Sy*Ry,        dot_c) / D,
-    relAlt: Math.atan2(Sx*Ux + Sy*Uy + Sz*Uz, dot_c) / D,
+    f: [Math.sin(H)*Math.cos(T), Math.cos(H)*Math.cos(T), Math.sin(T)],
+    r: [Math.cos(H), -Math.sin(H), 0],
+    u: [-Math.sin(H)*Math.sin(T), -Math.cos(H)*Math.sin(T), Math.cos(T)],
   };
 }
 
+/* Rotate v around the world Z (up) axis — positive deg = clockwise in azimuth. */
+function rotZ(v, deg) {
+  const o = deg * Math.PI / 180, c = Math.cos(o), s = Math.sin(o);
+  return [v[0]*c + v[1]*s, -v[0]*s + v[1]*c, v[2]];
+}
+
+/* Rodrigues rotation of v around unit axis k by deg. */
+function rotAxis(v, k, deg) {
+  const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+  const kv = cross3(k, v), kd = dot3(k, v);
+  return [
+    v[0]*c + kv[0]*s + k[0]*kd*(1-c),
+    v[1]*c + kv[1]*s + k[1]*kd*(1-c),
+    v[2]*c + kv[2]*s + k[2]*kd*(1-c),
+  ];
+}
+
+/* Perspective projection of a sky object (az/alt) through a camera basis.
+   Roll-aware: screen x/y are dot products with the actual right/up vectors. */
+function project(star, basis, width, height, zoom = 1) {
+  const D = Math.PI / 180;
+  const az = star.az * D, alt = star.alt * D;
+  const S = [Math.sin(az)*Math.cos(alt), Math.cos(az)*Math.cos(alt), Math.sin(alt)];
+
+  const depth = dot3(S, basis.f);   // how far in front of the camera
+  if (depth < 0.01) return null;    // behind or at edge of hemisphere
+
+  const f = (width/2) / Math.tan((FOV_H / zoom / 2) * D);
+  const x = width/2  + dot3(S, basis.r) / depth * f;
+  const y = height/2 - dot3(S, basis.u) / depth * f;
+
+  if (x < -80 || x > width + 80 || y < -80 || y > height + 80) return null;
+  return { x, y };
+}
+
 /* ------ Star drawing on canvas (ambient + milky way) ------ */
-function drawCanvas(canvas, ambientStarsWithAzAlt, milkyWithAzAlt, heading, tilt, paperRgb, nightMode, zoom = 1) {
+function drawCanvas(canvas, ambientStarsWithAzAlt, milkyWithAzAlt, basis, paperRgb, nightMode, zoom = 1) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== w*dpr || canvas.height !== h*dpr) {
@@ -103,7 +129,7 @@ function drawCanvas(canvas, ambientStarsWithAzAlt, milkyWithAzAlt, heading, tilt
   const mwOpacity = nightMode ? 0.05 : 0.10;
   for (const s of milkyWithAzAlt) {
     if (s.alt < -5) continue;
-    const p = project(s, heading, tilt, w, h, zoom);
+    const p = project(s, basis, w, h, zoom);
     if (!p) continue;
     const sz = 0.5 + (6 - s.mag) * 0.22;
     ctx.fillStyle = `rgba(${paperRgb}, ${mwOpacity})`;
@@ -113,7 +139,7 @@ function drawCanvas(canvas, ambientStarsWithAzAlt, milkyWithAzAlt, heading, tilt
   // ambient stars
   for (const s of ambientStarsWithAzAlt) {
     if (s.alt < 0) continue;
-    const p = project(s, heading, tilt, w, h, zoom);
+    const p = project(s, basis, w, h, zoom);
     if (!p) continue;
     const sz = Math.max(0.3, (6.2 - s.mag) * 0.45);
     const alpha = nightMode ? 0.4 : Math.min(1, 0.18 + (5 - s.mag) * 0.15);
@@ -236,48 +262,60 @@ function useDeviceOrientation(enabled) {
       return;
     }
 
-    // Event handler only writes to a ref — no React state, no render
+    // Event handler only writes to a ref — no React state, no render.
+    // Computes the FULL camera basis (forward/right/up) from alpha+beta+gamma
+    // so the azimuth describes where the CAMERA points, not just the phone body.
     function handler(e) {
       if (e.beta == null || e.gamma == null) return;
 
-      const b = e.beta  * Math.PI / 180;
-      const g = e.gamma * Math.PI / 180;
+      const D = Math.PI / 180;
+      // Safari's webkitCompassHeading is a true magnetic heading (clockwise
+      // from north) while alpha may be relative. Rebuild an absolute alpha
+      // compatible with the W3C rotation matrix (counter-clockwise).
+      const alphaDeg = (typeof e.webkitCompassHeading === "number")
+        ? (360 - e.webkitCompassHeading) % 360
+        : (e.alpha ?? 0);
 
-      // Tilt (altitude above horizon) from the camera's Z component in world frame.
-      // cz = -(cos β · cos γ): 0° at beta=90° (upright/horizon), 90° at beta=180° (zenith).
-      const cz   = -(Math.cos(b) * Math.cos(g));
-      const tilt = Math.max(-15, Math.min(90,
-        Math.asin(Math.max(-1, Math.min(1, cz))) * 180/Math.PI));
+      const a = alphaDeg * D, b = e.beta * D, g = e.gamma * D;
+      const cA = Math.cos(a), sA = Math.sin(a);
+      const cB = Math.cos(b), sB = Math.sin(b);
+      const cG = Math.cos(g), sG = Math.sin(g);
 
-      // Heading: use the hardware compass directly — no matrix drift.
-      const compassHeading = e.webkitCompassHeading ?? (e.alpha ?? 0);
-
-      rawRef.current = { compassHeading, tilt };
+      // W3C Z-X-Y intrinsic rotation. World frame: x=East, y=North, z=Up.
+      // Device axes in world frame are the matrix columns; the rear camera
+      // looks along -deviceZ, screen-right is +deviceX, screen-top is +deviceY.
+      rawRef.current = {
+        f: [-cA*sG - sA*sB*cG,  -sA*sG + cA*sB*cG,  -cB*cG],   // forward
+        r: [ cA*cG - sA*sB*sG,   sA*cG + cA*sB*sG,  -cB*sG],   // right
+        u: [-sA*cB,              cA*cB,              sB    ],  // up
+      };
     }
 
-    // rAF loop: low-pass filter. Freezes heading on >150° jumps (iOS compass flip at high tilt).
-    const SMOOTH = 0.2;
+    // rAF loop: low-pass filter on the basis VECTORS (not angles).
+    // Vector lerp has no 0/360 wrap, no gimbal instability near the zenith,
+    // and needs no artificial jump-rejection — motion stays continuous.
+    const SMOOTH = 0.18;
+    const lerp3 = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
 
     function tick() {
       if (rawRef.current) {
         const raw = rawRef.current;
         if (!smoothRef.current) {
-          smoothRef.current = { heading: raw.compassHeading, tilt: raw.tilt };
+          smoothRef.current = { f: raw.f, r: raw.r, u: raw.u };
         } else {
           const s = smoothRef.current;
-          let dh = raw.compassHeading - s.heading;
-          if (dh >  180) dh -= 360;
-          if (dh < -180) dh += 360;
-          // iOS flips webkitCompassHeading ~180° when tilt crosses ~45°.
-          // A genuine 180° turn while sky-gazing is physically implausible,
-          // so freeze heading on any jump > 150°.
-          if (Math.abs(dh) > 150) dh = 0;
-          smoothRef.current = {
-            heading: (s.heading + dh * SMOOTH + 360) % 360,
-            tilt:     s.tilt + (raw.tilt - s.tilt) * SMOOTH,
-          };
+          const f = norm3(lerp3(s.f, raw.f, SMOOTH));
+          let   r = lerp3(s.r, raw.r, SMOOTH);
+          // re-orthonormalise: r ⊥ f, then u completes the right-handed basis
+          const rf = dot3(r, f);
+          r = norm3([r[0]-rf*f[0], r[1]-rf*f[1], r[2]-rf*f[2]]);
+          const u = cross3(r, f);
+          smoothRef.current = { f, r, u };
         }
-        setOrient({ ...smoothRef.current });
+        const { f, r, u } = smoothRef.current;
+        const heading = (Math.atan2(f[0], f[1]) * 180/Math.PI + 360) % 360;
+        const tilt    = Math.asin(Math.max(-1, Math.min(1, f[2]))) * 180/Math.PI;
+        setOrient({ heading, tilt, basis: { f, r, u } });
       }
       rafRef.current = requestAnimationFrame(tick);
     }
@@ -379,11 +417,41 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
   // when compass mode is active and we have orientation data, override
   const rawHeading = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
   const rawTilt    = (compassMode && deviceOrient) ? deviceOrient.tilt    : tilt;
-  // In AR mode apply both offsets: heading corrects magnetic bias, tilt corrects sensor bias
-  const effHeading = cameraMode ? (rawHeading + plateOffset + 360) % 360 : rawHeading;
-  const effTilt    = cameraMode
-    ? Math.max(-15, Math.min(90, rawTilt + plateTiltOffset))
-    : rawTilt;
+
+  // Calibration offsets are only meaningful for the session in which they
+  // were measured — reset whenever AR mode toggles.
+  useEffect(() => {
+    setPlateOffset(0);
+    setPlateTiltOffset(0);
+    setPlateStatus(null);
+    setCalibLabel(null);
+  }, [cameraMode]);
+
+  // Effective camera basis.
+  // AR mode with live sensors: the full 3-D device basis (roll included),
+  // with calibration applied as true rotations — heading offset around the
+  // world vertical, tilt offset around the camera's right axis.
+  // Otherwise: zero-roll basis from (heading, tilt) — the flat sky chart
+  // deliberately stays upright.
+  const effBasis = useMemo(() => {
+    if (cameraMode && compassMode && deviceOrient?.basis) {
+      let { f, r, u } = deviceOrient.basis;
+      if (plateOffset) {
+        f = rotZ(f, plateOffset); r = rotZ(r, plateOffset); u = rotZ(u, plateOffset);
+      }
+      if (plateTiltOffset) {
+        f = rotAxis(f, r, plateTiltOffset); u = rotAxis(u, r, plateTiltOffset);
+      }
+      return { f, r, u };
+    }
+    const h = cameraMode ? (rawHeading + plateOffset + 360) % 360 : rawHeading;
+    const t = cameraMode ? Math.max(-15, Math.min(90, rawTilt + plateTiltOffset)) : rawTilt;
+    return basisFromHeadingTilt(h, t);
+  }, [cameraMode, compassMode, deviceOrient, plateOffset, plateTiltOffset, rawHeading, rawTilt]);
+
+  // Pointing direction derived from the basis (compass strip, labels, solver)
+  const effHeading = (Math.atan2(effBasis.f[0], effBasis.f[1]) * 180/Math.PI + 360) % 360;
+  const effTilt    = Math.asin(Math.max(-1, Math.min(1, effBasis.f[2]))) * 180/Math.PI;
 
   const paperRgb = nightMode ? "224, 122, 114" : dayMode ? "20, 15, 8" : "232, 228, 216";
 
@@ -412,10 +480,10 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
     return computeStarsPositions(MILKY_WAY_RD, observer, date);
   }, [observer, date]);
 
-  // redraw canvas whenever heading/tilt/size/nightMode/positions change
+  // redraw canvas whenever orientation/size/nightMode/positions change
   useEffect(() => {
-    if (canvasRef.current) drawCanvas(canvasRef.current, ambientWithAzAlt, milkyWithAzAlt, effHeading, effTilt, paperRgb, nightMode, zoom);
-  }, [effHeading, effTilt, size, nightMode, ambientWithAzAlt, milkyWithAzAlt, zoom]);
+    if (canvasRef.current) drawCanvas(canvasRef.current, ambientWithAzAlt, milkyWithAzAlt, effBasis, paperRgb, nightMode, zoom);
+  }, [effBasis, size, nightMode, ambientWithAzAlt, milkyWithAzAlt, zoom]);
 
   /* drag to pan + pinch to zoom */
   function onPointerDown(e) {
@@ -474,10 +542,10 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
   const namedProjected = useMemo(() => {
     return starsWithAzAlt.map(s => {
       if (s.alt < -5) return null;
-      const p = project(s, effHeading, effTilt, size.w, size.h, zoom);
+      const p = project(s, effBasis, size.w, size.h, zoom);
       return p ? { ...s, ...p } : null;
     }).filter(Boolean);
-  }, [starsWithAzAlt, effHeading, effTilt, size, zoom]);
+  }, [starsWithAzAlt, effBasis, size, zoom]);
 
   const planetsLive = useMemo(() => {
     if (!observer || !date) return [];
@@ -486,10 +554,10 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
 
   const planetProjected = useMemo(() => {
     return planetsLive.map(p => {
-      const pp = project(p, effHeading, effTilt, size.w, size.h, zoom);
+      const pp = project(p, effBasis, size.w, size.h, zoom);
       return pp ? { ...p, ...pp } : null;
     }).filter(Boolean);
-  }, [planetsLive, effHeading, effTilt, size, zoom]);
+  }, [planetsLive, effBasis, size, zoom]);
 
   const moonLive = useMemo(() => {
     if (!observer || !date) return null;
@@ -498,9 +566,9 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
 
   const moonProjected = useMemo(() => {
     if (!moonLive) return null;
-    const p = project(moonLive, effHeading, effTilt, size.w, size.h, zoom);
+    const p = project(moonLive, effBasis, size.w, size.h, zoom);
     return p ? { ...moonLive, ...p, id: "moon", name: "Lune" } : null;
-  }, [moonLive, effHeading, effTilt, size, zoom]);
+  }, [moonLive, effBasis, size, zoom]);
 
   const sunLive = useMemo(() => {
     if (!observer || !date) return null;
@@ -509,9 +577,9 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
 
   const sunProjected = useMemo(() => {
     if (!sunLive) return null;
-    const p = project(sunLive, effHeading, effTilt, size.w, size.h, zoom);
+    const p = project(sunLive, effBasis, size.w, size.h, zoom);
     return p ? { ...sunLive, ...p, id: "sun", name: "Soleil" } : null;
-  }, [sunLive, effHeading, effTilt, size, zoom]);
+  }, [sunLive, effBasis, size, zoom]);
 
   // constellation lines visible
   // Best target for one-tap calibration (works day and night)
@@ -539,22 +607,17 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
     return lines;
   }, [namedProjected]);
 
-  // Horizon (alt=0): gnomonic y = h/2 + tan(tilt)*f
+  // Horizon (alt=0) in the current viewing azimuth, projected through the basis
   const horizonY = useMemo(() => {
-    const D = Math.PI / 180;
-    const f = (size.w/2) / Math.tan((FOV_H / zoom / 2) * D);
-    const y = size.h/2 + Math.tan(effTilt * D) * f;
-    return (y >= 0 && y <= size.h) ? y : null;
-  }, [effTilt, size, zoom]);
+    const p = project({ az: effHeading, alt: 0 }, effBasis, size.w, size.h, zoom);
+    return (p && p.y >= 0 && p.y <= size.h) ? p.y : null;
+  }, [effBasis, effHeading, size, zoom]);
 
-  // Zenith (alt=90): gnomonic y = h/2 - cot(tilt)*f
-  const zenithY = useMemo(() => {
-    if (effTilt < 0.5) return null;
-    const D = Math.PI / 180, T = effTilt * D;
-    const f = (size.w/2) / Math.tan((FOV_H / zoom / 2) * D);
-    const y = size.h/2 - (Math.cos(T) / Math.sin(T)) * f;
-    return (y >= 0 && y <= size.h) ? y : null;
-  }, [effTilt, size, zoom]);
+  // Zenith (alt=90) — with roll it may sit anywhere on screen, so keep x too
+  const zenithP = useMemo(() => {
+    const p = project({ az: 0, alt: 90 }, effBasis, size.w, size.h, zoom);
+    return (p && p.x >= 0 && p.x <= size.w && p.y >= 0 && p.y <= size.h) ? p : null;
+  }, [effBasis, size, zoom]);
 
   // closest bright object to center reticle
   const reticleTarget = useMemo(() => {
@@ -658,12 +721,12 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
     let bestOffset = 0, bestScore = Infinity;
     const baseH = rawHeading;
     for (let dh = -45; dh <= 45; dh++) {
-      const testH = (baseH + dh + 360) % 360;
+      const testBasis = basisFromHeadingTilt((baseH + dh + 360) % 360, effTilt);
       let score = 0;
       for (const spot of normSpots) {
         let minD = 0.25;
         for (const star of allCandidates) {
-          const p = project(star, testH, effTilt, size.w, size.h, zoom);
+          const p = project(star, testBasis, size.w, size.h, zoom);
           if (!p) continue;
           const d = Math.hypot((p.x/size.w - 0.5)*2 - spot.nx, (p.y/size.h - 0.5)*2 - spot.ny);
           if (d < minD) minD = d;
@@ -674,7 +737,9 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
     }
     const confidence = 1 - bestScore / (normSpots.length * 0.25);
     if (confidence > 0.25) {
-      setPlateOffset(prev => prev + bestOffset);
+      // dh was searched relative to the RAW heading, so the offset is
+      // absolute — replace it, never accumulate.
+      setPlateOffset(bestOffset);
       setPlateStatus("ok");
     } else {
       setPlateStatus("weak");
@@ -719,8 +784,8 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
       )}
 
       {/* zenith marker */}
-      {zenithY !== null && (
-        <div className="zenith" style={{ top: zenithY + "px", left: size.w/2 + "px" }}>
+      {zenithP !== null && (
+        <div className="zenith" style={{ top: zenithP.y + "px", left: zenithP.x + "px" }}>
           <span className="zenith-cross"></span>
           <span className="zenith-label">ZÉNITH · 90°</span>
         </div>

@@ -2,10 +2,13 @@
 
 ## Bugs à corriger
 - [ ] Vide en bas de l'écran en mode PWA (safe-area-inset-bottom)
-- [ ] Blocage du tilt à ~80° vers le zénith (lever le plafond à 90°+)
+- [x] Blocage du tilt à ~80° vers le zénith (levé à 90°)
+- [x] Décalage AR gauche/droite — refonte projection 3D (base caméra complète avec roulis)
 
 ## En cours / priorité haute
-- [ ] **Mode jour** — palette blanc cassé, noir, accents oranges (complément du mode nuit rouge)
+- [x] **Mode jour** — palette blanc cassé, noir, accents oranges
+- [ ] Calibrer le champ de vision réel de la caméra (vidéo `cover` ≠ constante FOV 70°/zoom)
+- [ ] Déclinaison magnétique (World Magnetic Model) — nord magnétique → géographique
 
 ## Nouvelles fonctionnalités
 
