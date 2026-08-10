@@ -63,6 +63,19 @@ const NavGlyphs = {
       <circle cx="14" cy="9" r="1" fill="currentColor" opacity="0.7"/>
     </svg>
   ),
+  eclipse: (
+    <svg width="19" height="19" viewBox="0 0 19 19" fill="none">
+      <defs>
+        <mask id="nav-ecl-mask">
+          <rect width="19" height="19" fill="#fff"/>
+          <circle cx="12.6" cy="7.6" r="5.6" fill="#000"/>
+        </mask>
+      </defs>
+      <circle cx="9.5" cy="9.5" r="5.6" fill="currentColor" mask="url(#nav-ecl-mask)"/>
+      <circle cx="12.6" cy="7.6" r="5.6" stroke="currentColor" strokeWidth="0.7"
+        fill="none" opacity="0.5"/>
+    </svg>
+  ),
 };
 
 function BottomNav({ screen, onChange }) {
@@ -71,6 +84,7 @@ function BottomNav({ screen, onChange }) {
     { id: "nuit",    label: "Cette nuit" },
     { id: "atlas",   label: "Atlas" },
     { id: "systeme", label: "Système" },
+    { id: "eclipse", label: "Éclipses" },
   ];
   return (
     <nav className="nav">

@@ -25,7 +25,8 @@
 - [ ] Fiche détail avec description et conditions d'observation
 
 ### Notifications
-- [ ] Éclipses (solaire et lunaire)
+- [x] Éclipses (solaire et lunaire) — écran dédié ÉCLIPSES
+- [ ] Notification push à l'approche d'une éclipse
 - [ ] Conjonctions planétaires remarquables
 - [ ] Passage de l'ISS au-dessus de la position
 - [ ] Opposition des planètes extérieures

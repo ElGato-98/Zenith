@@ -327,6 +327,16 @@ function App() {
         />
       )}
 
+      {screen === "eclipse" && (
+        <EclipseScreen
+          observer={observer}
+          location={location}
+          onOpenLocation={() => setLocSheetOpen(true)}
+          nightMode={nightMode}
+          dayMode={dayMode}
+        />
+      )}
+
       {screen === "atlas" && (
         <AtlasScreen onSelect={selectObject} favorites={favorites} onToggleFav={toggleFavorite}/>
       )}
