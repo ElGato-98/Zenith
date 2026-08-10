@@ -247,13 +247,20 @@ function useDeviceOrientation(enabled) {
   const [orient, setOrient] = useState(null);
   const [permState, setPermState] = useState("idle"); // idle | granted | denied | unsupported
   const rawRef    = useRef(null); // latest sensor reading, written in event handler
-  const smoothRef = useRef(null); // low-pass filtered value
+  const smoothRef = useRef(null); // low-pass filtered basis
+  const azRefRef  = useRef(null); // session azimuth reference, degrees
+  const frozenRef = useRef(false);// true once the user has calibrated
   const rafRef    = useRef(null);
+
+  // Called after a manual calibration: stop letting the compass drag the
+  // reference around, the user's fix is authoritative from now on.
+  const freezeAzRef = useCallback(() => { frozenRef.current = true; }, []);
 
   useEffect(() => {
     if (!enabled) {
       if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
       rawRef.current = null; smoothRef.current = null;
+      azRefRef.current = null; frozenRef.current = false;
       setOrient(null);
       return;
     }
@@ -262,44 +269,69 @@ function useDeviceOrientation(enabled) {
       return;
     }
 
-    // Event handler only writes to a ref — no React state, no render.
-    // Computes the FULL camera basis (forward/right/up) from alpha+beta+gamma
-    // so the azimuth describes where the CAMERA points, not just the phone body.
+    // Handler only writes to a ref — no React state, no render.
+    //
+    // Attitude comes from the RAW alpha/beta/gamma triplet, which is one
+    // self-consistent gyroscope solution: relative rotation (roll included)
+    // is accurate. Its "north" is an arbitrary origin — that is corrected
+    // separately below. The compass is deliberately NOT fed into the matrix:
+    // iOS heading error grows as the phone tilts skyward, and injecting it
+    // into alpha would swing the whole frame instead of biasing one angle.
     function handler(e) {
       if (e.beta == null || e.gamma == null) return;
 
       const D = Math.PI / 180;
-      // Safari's webkitCompassHeading is a true magnetic heading (clockwise
-      // from north) while alpha may be relative. Rebuild an absolute alpha
-      // compatible with the W3C rotation matrix (counter-clockwise).
-      const alphaDeg = (typeof e.webkitCompassHeading === "number")
-        ? (360 - e.webkitCompassHeading) % 360
-        : (e.alpha ?? 0);
-
-      const a = alphaDeg * D, b = e.beta * D, g = e.gamma * D;
+      const alphaRaw = e.alpha ?? 0;
+      const a = alphaRaw * D, b = e.beta * D, g = e.gamma * D;
       const cA = Math.cos(a), sA = Math.sin(a);
       const cB = Math.cos(b), sB = Math.sin(b);
       const cG = Math.cos(g), sG = Math.sin(g);
 
       // W3C Z-X-Y intrinsic rotation. World frame: x=East, y=North, z=Up.
-      // Device axes in world frame are the matrix columns; the rear camera
-      // looks along -deviceZ, screen-right is +deviceX, screen-top is +deviceY.
+      // Rear camera looks along -deviceZ; screen-right is +deviceX, top +deviceY.
       rawRef.current = {
-        f: [-cA*sG - sA*sB*cG,  -sA*sG + cA*sB*cG,  -cB*cG],   // forward
-        r: [ cA*cG - sA*sB*sG,   sA*cG + cA*sB*sG,  -cB*sG],   // right
-        u: [-sA*cB,              cA*cB,              sB    ],  // up
+        f: [-cA*sG - sA*sB*cG,  -sA*sG + cA*sB*cG,  -cB*cG],
+        r: [ cA*cG - sA*sB*sG,   sA*cG + cA*sB*sG,  -cB*sG],
+        u: [-sA*cB,              cA*cB,              sB    ],
+        alphaRaw,
+        beta:  e.beta,
+        gamma: e.gamma,
+        wch: (typeof e.webkitCompassHeading === "number") ? e.webkitCompassHeading : null,
+        acc: (typeof e.webkitCompassAccuracy === "number") ? e.webkitCompassAccuracy : null,
       };
     }
 
     // rAF loop: low-pass filter on the basis VECTORS (not angles).
-    // Vector lerp has no 0/360 wrap, no gimbal instability near the zenith,
-    // and needs no artificial jump-rejection — motion stays continuous.
+    // Vector lerp has no 0/360 wrap and no gimbal instability near the zenith,
+    // so no artificial jump-rejection is needed — motion stays continuous.
     const SMOOTH = 0.18;
     const lerp3 = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
 
     function tick() {
       if (rawRef.current) {
         const raw = rawRef.current;
+
+        /* --- absolute azimuth reference ---------------------------------
+           The gyro frame is offset from true north by a constant for the
+           whole session. Recover it as (alphaRaw + compassHeading), but only
+           sample it while the camera is near the horizon, where iOS's
+           tilt-compensated heading is trustworthy — and creep towards it
+           slowly so momentary magnetic disturbance cannot yank the sky.   */
+        if (raw.wch != null && !frozenRef.current) {
+          const sample  = (raw.alphaRaw + raw.wch + 360) % 360;
+          const camTilt = Math.asin(Math.max(-1, Math.min(1, raw.f[2]))) * 180/Math.PI;
+          if (azRefRef.current == null) {
+            azRefRef.current = sample;
+          } else if (Math.abs(camTilt) < 40) {
+            let d = sample - azRefRef.current;
+            if (d >  180) d -= 360;
+            if (d < -180) d += 360;
+            azRefRef.current = (azRefRef.current + d * 0.05 + 360) % 360;
+          }
+        } else if (azRefRef.current == null) {
+          azRefRef.current = 0; // no compass (Android/desktop): purely relative
+        }
+
         if (!smoothRef.current) {
           smoothRef.current = { f: raw.f, r: raw.r, u: raw.u };
         } else {
@@ -309,13 +341,24 @@ function useDeviceOrientation(enabled) {
           // re-orthonormalise: r ⊥ f, then u completes the right-handed basis
           const rf = dot3(r, f);
           r = norm3([r[0]-rf*f[0], r[1]-rf*f[1], r[2]-rf*f[2]]);
-          const u = cross3(r, f);
-          smoothRef.current = { f, r, u };
+          smoothRef.current = { f, r, u: cross3(r, f) };
         }
-        const { f, r, u } = smoothRef.current;
+
+        // Rotate the gyro frame onto true north — one constant, applied last.
+        const azRef = azRefRef.current || 0;
+        const sm = smoothRef.current;
+        const f = rotZ(sm.f, azRef), r = rotZ(sm.r, azRef), u = rotZ(sm.u, azRef);
+
         const heading = (Math.atan2(f[0], f[1]) * 180/Math.PI + 360) % 360;
         const tilt    = Math.asin(Math.max(-1, Math.min(1, f[2]))) * 180/Math.PI;
-        setOrient({ heading, tilt, basis: { f, r, u } });
+        setOrient({
+          heading, tilt, basis: { f, r, u },
+          diag: {
+            alpha: raw.alphaRaw, beta: raw.beta, gamma: raw.gamma,
+            wch: raw.wch, acc: raw.acc,
+            azRef, frozen: frozenRef.current,
+          },
+        });
       }
       rafRef.current = requestAnimationFrame(tick);
     }
@@ -348,7 +391,7 @@ function useDeviceOrientation(enabled) {
     return Promise.resolve("granted");
   }
 
-  return { orient, permState, requestPermission };
+  return { orient, permState, requestPermission, freezeAzRef };
 }
 
 /* ------ Camera stream hook ------ */
@@ -393,7 +436,7 @@ function useCameraStream(enabled) {
 }
 
 /* ------ Sky View main component ------ */
-function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, compassMode, deviceOrient, cameraMode = false }) {
+function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, compassMode, deviceOrient, cameraMode = false, onCalibrated }) {
   const [heading, setHeading] = useState(180);  // start facing south
   const [tilt, setTilt] = useState(45);          // looking somewhat up
   const containerRef = useRef(null);
@@ -413,6 +456,7 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
   const [plateTiltOffset, setPlateTiltOffset] = useState(0);
   const [plateStatus,     setPlateStatus]     = useState(null);
   const [calibLabel,      setCalibLabel]      = useState(null);
+  const [showDiag,        setShowDiag]        = useState(false);
 
   // when compass mode is active and we have orientation data, override
   const rawHeading = (compassMode && deviceOrient) ? deviceOrient.heading : heading;
@@ -668,12 +712,16 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
     // User points phone so the target (Moon / Sun / planet) is at the reticle centre,
     // then taps CALIBRER. We compute the heading AND tilt offsets in one shot.
     if (calibTarget && compassMode && deviceOrient) {
-      const newHOffset = (calibTarget.az - rawHeading + 360) % 360;
-      const newTOffset = calibTarget.alt - rawTilt;
+      let newHOffset = (calibTarget.az - rawHeading) % 360;
+      if (newHOffset >  180) newHOffset -= 360;
+      if (newHOffset < -180) newHOffset += 360;
       setPlateOffset(newHOffset);
-      setPlateTiltOffset(newTOffset);
+      setPlateTiltOffset(calibTarget.alt - rawTilt);
       setCalibLabel(calibTarget.name);
       setPlateStatus("ok");
+      // The user's fix is now the authority — stop the compass estimator from
+      // slowly dragging the azimuth reference back underneath it.
+      if (onCalibrated) onCalibrated();
       setTimeout(() => setPlateStatus(null), 3000);
       return;
     }
@@ -741,6 +789,7 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
       // absolute — replace it, never accumulate.
       setPlateOffset(bestOffset);
       setPlateStatus("ok");
+      if (onCalibrated) onCalibrated();
     } else {
       setPlateStatus("weak");
     }
@@ -771,6 +820,26 @@ function SkyView({ nightMode, dayMode = false, onTapObject, observer, date, comp
               : calibTarget            ? `→ ${calibTarget.name}`
               : "Calibrer"}
           </button>
+          <button
+            className="diag-btn"
+            onClick={() => setShowDiag(d => !d)}
+            title="Valeurs capteurs"
+          >
+            {showDiag ? "×" : "?"}
+          </button>
+          {showDiag && deviceOrient?.diag && (
+            <div className="diag-panel numeral">
+              <div>α {deviceOrient.diag.alpha?.toFixed(1)}  β {deviceOrient.diag.beta?.toFixed(1)}  γ {deviceOrient.diag.gamma?.toFixed(1)}</div>
+              <div>compas {deviceOrient.diag.wch == null ? "—" : deviceOrient.diag.wch.toFixed(1) + "°"}
+                   {deviceOrient.diag.acc != null && ` ±${deviceOrient.diag.acc.toFixed(0)}°`}</div>
+              <div>réf az {deviceOrient.diag.azRef.toFixed(1)}° {deviceOrient.diag.frozen ? "(figée)" : "(auto)"}</div>
+              <div>visée {effHeading.toFixed(1)}° / alt {effTilt.toFixed(1)}°</div>
+              <div>corr {plateOffset.toFixed(1)}° / {plateTiltOffset.toFixed(1)}°</div>
+              {calibTarget && (
+                <div>{calibTarget.name} az {calibTarget.az.toFixed(1)}° alt {calibTarget.alt.toFixed(1)}°</div>
+              )}
+            </div>
+          )}
         </>
       )}
       <canvas className="sky-canvas" ref={canvasRef} style={cameraMode ? { opacity: 0 } : undefined}></canvas>

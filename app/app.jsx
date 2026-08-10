@@ -208,7 +208,7 @@ function App() {
       return next;
     });
   }
-  const { orient: deviceOrient, permState, requestPermission } = useDeviceOrientation(compassMode);
+  const { orient: deviceOrient, permState, requestPermission, freezeAzRef } = useDeviceOrientation(compassMode);
 
   async function toggleCompass() {
     if (compassMode) { setCompassMode(false); return; }
@@ -294,6 +294,7 @@ function App() {
             compassMode={compassMode}
             deviceOrient={deviceOrient}
             cameraMode={cameraMode}
+            onCalibrated={freezeAzRef}
           />
           <LocationChip location={location} onOpen={() => setLocSheetOpen(true)}/>
           <div className="hud-top">
